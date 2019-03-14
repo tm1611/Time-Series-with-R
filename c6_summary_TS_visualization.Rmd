@@ -2,9 +2,9 @@
 title: "Time Series Visualization"
 author: "Timo Meiendresch"
 date: "16 February 2019"
-output:
-  pdf_document: default
-  html_document: default
+output: 
+  html_document:
+    keep_md: true
 ---
 
 

@@ -2,9 +2,9 @@
 title: "Advanced Methods"
 author: "Timo Meiendresch"
 date: "4 February 2019"
-output:
-  html_document: default
-  pdf_document: default
+output: 
+  html_document:
+    keep_md: true
 ---
 
 ```{r, message=FALSE, echo=FALSE}
