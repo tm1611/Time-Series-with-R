@@ -1,0 +1,720 @@
+---
+title: "Forecasting"
+author: "Timo Meiendresch"
+date: "28 January 2019"
+output: html_document
+---
+
+```{r, message=FALSE, echo=FALSE}
+rm(list=ls())
+graphics.off()
+```
+
+```{r, message=FALSE}
+library("astsa")
+library("ggplot2")
+library("forecast")
+library("fpp2")
+```
+
+# Forecasting
+
+## Ch. 1: Exploring and Visualizing Time Series
+Start with exploring and visualizing some time series which are included in the packages and will be used throughout. To get additional information on the data, just use `?dataset` in console and consult the documentation.
+
+### Introducing data and basic plots
+
+```{r}
+# Time Series
+data(gnp, package = "astsa")
+grgnp <- diff(log(gnp))
+eu_stocks <- EuStockMarkets
+
+# Visualizing
+autoplot(eu_stocks, facets = TRUE)
+autoplot(eu_stocks, facets = FALSE)
+
+# Plot the three main series to be used 
+autoplot(gold)
+autoplot(woolyrnq)
+autoplot(gas)
+
+# Seasonal frequencies of the three series
+frequency(gold)
+frequency(woolyrnq)
+frequency(gas)
+
+```
+
+```{r}
+# More data, more plots
+autoplot(a10)
+# Seasonalplot + seasonplot polar form
+ggseasonplot(a10)
+ggseasonplot(a10, polar=TRUE)
+
+# Beer data (subset)
+beer <- window(ausbeer, start=1992)
+autoplot(beer)
+ggseasonplot(beer)
+ggsubseriesplot(beer)
+```
+
+### Trends, seasonality, and cyclicity
+Time series patterns can be divided into trend, seasonal, cyclic:
+
+- Trend: Long-trerm increase or decrease in the data
+- Seasonal: Periodic pattern exits due to calendar (quarter, month, day of the week)
+- Cyclic: Data exhihibts rises and falls that are not of fixed period 
+
+Also, there are important differences between seasonal and cyclic patterns:
+
+- Seasonal pattern has constant length vs. cyclic pattern has a varying length.
+- Average length of cycle longer than length of seasonal pattern
+
+```{r}
+autoplot(oil)
+gglagplot(oil)
+ggAcf(oil)
+ggPacf(oil)
+```
+
+```{r}
+# Plot the annual sunspot numbers
+autoplot(sunspot.year)
+ggAcf(sunspot.year)
+
+# Save the lag corresponding to maximum autocorrelation
+maxlag_sunspot <- 1
+
+# Plot the traffic on the Hyndsight blog
+autoplot(hyndsight)
+ggAcf(hyndsight)
+
+# Save the lag corresponding to maximum autocorrelation
+maxlag_hyndsight <- 7
+```
+
+### White Noise and Autocorrelation
+White Noise indicates that there is no significant autocorrelation in the data that could be used to forecast a time series. ACF plots show autocorrelation for some lags. There should be no significant values in the ACF for white noise. 
+
+To test for autocorrealation altogether we can use a **Ljung-Box Test**. This test considers the first h autocorrelation values together. A significant test (small p-value) indicates the data are probably not white noise. Null hypothesis is white noise and rejecting the null hypothesis indicates that data is likely not WN. 
+
+To summarize: 
+
+- White Noise is a purely random time series
+- Test white noise by looking at an ACF plot or by doing a Ljung-Box test.
+
+```{r}
+# Plot the original series
+autoplot(goog)
+
+# Plot the differenced series
+autoplot(diff(goog))
+
+# ACF of the differenced series
+ggAcf(diff(goog))
+
+# Ljung-Box test of the differenced series
+Box.test(diff(goog), lag = 10, type = "Ljung")
+
+```
+
+## Ch. 2: Benchmark methods and forecast accuracy
+
+```{r}
+# naive and seasonal naive forecasts...
+# Use naive() to forecast the goog series
+fcgoog <- naive(goog, 20)
+
+# Plot and summarize the forecasts
+autoplot(fcgoog)
+summary(fcgoog)
+
+# Use snaive() to forecast the ausbeer series
+fcbeer <- snaive(ausbeer, 16)
+
+# Plot and summarize the forecasts
+autoplot(fcbeer)
+summary(fcbeer)
+
+
+```
+
+### Fitted values and residuals
+
+A **fitted value** is the forecast of an observation using all previous observations:
+
+- They are one-step forecasts 
+- Often not true forecasts since parameters are estimated on all data.
+
+A **residual** is the difference between an observation and its fitted value:
+
+- That is, they are one-step forecast errors
+
+Residuals should look, and behave, like white Noise. Essential assumptions are:
+
+- They should be uncorrelated
+- They should have mean zero (unbiased)
+
+Useful properties (for computing prediction intervals):
+
+- They should have constant variance
+- They should be normally distributed
+
+Assumptions can be checked using the `checkresiduals()` function.
+
+```{r}
+library(magrittr)
+
+# Use pipe to check residuals
+goog %>% naive() %>% checkresiduals()
+
+# Check the residuals from the naive forecasts applied to the goog series
+goog %>% naive() %>% checkresiduals()
+
+# Do they look like white noise (TRUE or FALSE)
+googwn <- TRUE
+
+# Check the residuals from the seasonal naive forecasts applied to the ausbeer series
+ausbeer %>% snaive() %>% checkresiduals()
+
+# Do they look like white noise (TRUE or FALSE)
+beerwn <- FALSE
+```
+
+### Training and test sets
+
+Construct a test set, where some of the last data is hidden from the modeling part. Split into training and test dataset. 
+
+- Test set must not be used for any aspect of calculating forecasts.
+- Build forecasts using training set
+- A model which fits the training data well will not necessarilty forecast well. 
+
+**Forecast errors** are the difference between observed value and its forecast in the test set. They are errors based on the test set and may have a different forecast horizon.
+
+**Measures of forecast accuracy** are based on the forecast error:
+
+$$e_t = y_t - \overline{y}_t$$
+
+Commonly used measures are:
+
+- Mean Absolute Arror (MAE) = $average(|e_t|)$
+- Mean Squared Error (MSE) = $average(e^2_t)$
+- Mean Absolute Percentage Error (MAPE) = $100 \cdot (|e_t / y_t|) $
+- Mean Absolute Scaled Error (MASE) = $MAE / Q$
+
+The `accuracy()` command can calculate these measures. 
+
+```{r}
+# Create the training data as train
+train <- subset(gold, end = 1000)
+
+# Compute naive forecasts and save to naive_fc
+# Can be done with snaive in the same way
+naive_fc <- naive(train, h = 108)
+
+# Compute mean forecasts and save to mean_fc
+mean_fc <- meanf(train, h = 108)
+
+# Use accuracy() to compute RMSE statistics
+accuracy(naive_fc, gold)
+accuracy(mean_fc, gold)
+
+# Assign one of the two forecasts as bestforecasts
+bestforecasts <- naive_fc
+```
+
+### Time series cross-validation
+Forecast evaluation on a rolling origin can be used to cross-validate how good a time series model performs for a specified forecast horizon. `tsCV` function performs MSE using time series cross-validation. 
+
+```{r}
+# Using the tsCV function
+sq <- function(u){u^2}
+
+for (h in 1:10){
+  oil %>%
+    tsCV(forecastfunction = naive, h = h) %>% 
+    sq() %>% 
+    mean(na.rm=TRUE) %>% 
+    print()
+}
+```
+
+Applying cross-validation without a loop:
+
+```{r}
+# Compute cross-validated errors for up to 8 steps ahead
+e <- tsCV(goog, forecastfunction = naive, h = 8)
+
+# Compute the MSE values and remove missing values
+mse <- colMeans(e^2, na.rm = TRUE)
+
+# Plot the MSE values against the forecast horizon
+data.frame(h = 1:8, MSE = mse) %>%
+  ggplot(aes(x = h, y = MSE)) + geom_point()
+```
+
+## Ch. 3 Exponential Smoothing
+Most simplistic methods of forecasting are the `Mean`-method and the `naive`-Method. **Exponentially weighted forecasts** are somewhere in between these two methods as the weighting decreases with distance to current period. The **simple exponential** forecast can be determined by the following equation: 
+
+$$\hat{y}_{t+h|t} = \alpha y_t + \alpha (1-\alpha)y_{t-1} + \alpha (1-\alpha)^2 y_{t-2} + ... $$
+with $0 \leq \alpha \leq 1$. This can also be expressed as:
+
+- Forecast equation: $\hat{y}_{t+h|t} = \ell_t $
+- Smoothing equation: $\ell_t = \alpha y_t + (1-\alpha) \ell_{t-1}$
+
+with $\ell_t$ as the level (or the smoothed value) of the series at time t. $\alpha$ and $\ell_0$ are chosen by minimizing SSE:
+
+$$SSE = \sum_{t=1}^T (y_t - \hat{y}_{t|t-1})^2$$
+
+```{r}
+oildata <- window(oil, start = 1996)  # Subset oil data
+ts.plot(oildata)
+fc <- ses(oildata, h=5)               # Simple exp. smoothing
+summary(fc)
+
+# plotting fc
+autoplot(fc) + 
+  ylab("Oil (millions of tonnes)") + 
+  xlab("Year")
+
+# Use ses() to forecast the next 10 years of winning times
+fc <- ses(marathon, h = 10)
+
+# Use summary() to see the model parameters
+summary(fc)
+
+# Use autoplot() to plot the forecasts
+autoplot(fc)
+
+# Add the one-step forecasts for the training data to the plot
+autoplot(fc) + autolayer(fitted(fc))
+
+# Create a training set using subset()
+train <- subset(marathon, end = length(marathon) - 20)
+
+# Compute SES and naive forecasts, save to fcses and fcnaive
+fcses <- ses(train, h = 20)
+fcnaive <- naive(train, h = 20)
+
+# Calculate forecast accuracy measures
+accuracy(fcses, marathon)
+accuracy(fcnaive, marathon)
+
+# Save the best forecasts as fcbest
+fcbest <- fcnaive
+
+
+```
+
+### Exponential smoothing methods with trend
+In case the underlying data exhibits a trend we have to add a trend component to the simple exponential smoothing. This is called **Holt's linear trend** and can be expressed as adding a trend equation, such that we get: 
+
+- Forecast: $\hat{y}_{t+h|t} = \ell_t $
+- Level: $\ell_t = \alpha y_t + (1-\alpha) \ell_{t-1}$
+- Trend: $b_t = \beta^* (\ell_t - \ell_{t-1}) + (1- \beta^*) b_{t-1} $
+
+with the two smoothing parameters $\alpha$ and $\beta^*$. 
+
+```{r}
+# Holt's method in R
+marathon %>% 
+  holt(h=5) %>% 
+  autoplot()
+```
+
+Another, closely related, method is the **Damped trend method** which has a damping parameter $0 < \phi < 1$:
+
+- $\hat{y}_{t+h|t} = \ell_t + (\phi + phi^2 + ... + \phi^h) b_t$
+- $\ell_t = \alpha y_t + (1-\alpha)(\ell_{t-1} + \phi b_{t-1})$
+- $b_t = \beta^* (\ell_t - \ell_{t-1}) + (1- \beta^*)\phi b_{t-1} $
+
+If $\phi = 1$, this is identical to Holt's method.
+
+```{r}
+# Produce 10 year forecasts of austa using holt()
+fcholt <- holt(austa, h=10, PI=FALSE)
+fcholt_d <- holt(austa, h=10, damped = TRUE, PI =FALSE) 
+
+# Look at fitted model using summary()
+summary(fcholt)
+summary(fcholt_d)
+
+# Plot the forecasts
+autoplot(austa) + 
+  autolayer(fcholt, series="Linear Trend") +
+  autolayer(fcholt_d, series="Damped Trend")
+
+# Check that the residuals look like white noise
+checkresiduals(fcholt)
+```
+
+### Holt-Winter's method with trend and seasonality
+Additional seasonal component to Holt's method. 
+
+**Holt-Winter's additive method**:
+
+- Forecast: $\hat{y}_{t+h|t} = \ell_t + hb_t + s_{t-m+ h_{m}^+}$
+- Level: $\ell_t = \alpha (y_t - s_{t-m}) + (1-\alpha)( \ell_{t-1} + b_{t-1})$
+- Trend: $b_t = \beta^* (\ell_t - \ell_{t-1}) + (1- \beta^*) b_{t-1} $
+- Seasonal: $\gamma(y_t - l_{t-1} - b_{t-1} + (1-\gamma) s_{t-m}$
+
+$m=$ period of seasonality (e.g. 4 for quarterly data)
+
+There is also a multiplicative version of Holt-Winter's method, which is preferred in case where the seasonal variation increases with level of the series (greater variance). This is often the case. 
+
+```{r}
+aust <- window(austourists, start=2005)
+fc1 <- hw(aust, seasonal="additive", PI=FALSE)
+fc2 <- hw(aust, seasonal = "multiplicative", PI=FALSE)
+
+autoplot(aust) +
+  autolayer(fc1, series="additive") +
+  autolayer(fc2, series="multiplicative")
+
+# Plot the data
+autoplot(a10)
+
+# Produce 3 year forecasts
+fc <- hw(a10, seasonal = "multiplicative", h = 36)
+
+# Check if residuals look like white noise
+checkresiduals(fc)
+whitenoise <- FALSE
+
+# Plot forecasts
+autoplot(fc)
+
+# Create training data with subset()
+train <- subset(hyndsight, end = length(hyndsight) - (4*7))
+
+# Holt-Winters additive forecasts as fchw
+fchw <- hw(train, seasonal = "additive", h = (4*7))
+
+# Seasonal naive forecasts as fcsn
+fcsn <- snaive(train, 28)
+
+# Find better forecasts with accuracy()
+accuracy(fchw, hyndsight)
+accuracy(fcsn, hyndsight)
+
+# Plot the better forecasts
+autoplot(fchw)
+
+```
+
+### State space models for exponential smoothing
+Each exponential smoothing method can be written as an **innovations state space model**. In genereal, there are 18 possible state space models: 
+
+- Trend = {None, Adittive, Additive_dampened}
+- Seasonal = {None, Additive, Multiplicative}
+
+which result in 9 possible exponential smoothing methods and 
+
+- Error = {Addittive, Multiplicative}
+
+leading to 18 possible state space models. These are called ETS models (Error, Trend, Seasonal). Parameters of ETS models can be estimated using **Maximum Likelihood Estimation**, which is the probability of the data arising from the specified model. For models with additive errors, this is equivalent to minimizing SSE. Choose the best model by minimizing a corrected version of Akaike's Information Criterion (AIC_c). The function `ets()` does this internally yielding to the best model fit. This function gives you the best model without forecasting. Hence, it has to be handed to the forecasting function. 
+
+```{r}
+# ETS model on ausair
+ausair %>%
+  ets() %>% 
+  forecast() %>% 
+  autoplot()
+
+h02 %>% 
+  ets() %>% 
+  forecast() %>% 
+  autoplot()
+```
+
+Type of model is chosen for you in the ets() function. 
+
+```{r}
+# Fit ETS model to austa in fitaus
+fitaus <- ets(austa)
+
+# Check residuals
+checkresiduals(fitaus)
+
+# Plot forecasts
+autoplot(forecast(fitaus))
+
+# Repeat for hyndsight data in fiths
+fiths <- ets(hyndsight)
+checkresiduals(fiths)
+autoplot(forecast(fiths))
+
+```
+
+The null hypothesis of independently distributed residuals can not be rejected for the first model but can be rejected for the second one. Hence, the residuals of the ETS model on `hyndsight` exhibts serial correlation. 
+
+```{r}
+autoplot(austres)
+
+# Function to return ETS forecasts
+fets <- function(y, h) {
+  forecast(ets(y), h = h)
+}
+
+# Apply tsCV() for both methods
+e1 <- tsCV(austres, fets, h = 4)
+e2 <- tsCV(austres, snaive, h = 4)
+
+# Compute MSE of resulting errors (watch out for missing values)
+mean(e1^2, na.rm=TRUE)
+mean(e2^2, na.rm=TRUE)
+
+```
+
+It is important to realize that ETS doesn't work for all cases (because...):
+
+```{r} 
+# Plot the lynx series
+autoplot(lynx)
+
+# Use ets() to model the lynx series
+fit <- ets(lynx)
+
+# Use summary() to look at model and parameters
+summary(fit)
+
+forecast(fit, 20)
+
+```
+
+## Ch. 4: Forecasting with ARIMA models
+
+### Transformations for variance stabilization
+If the data show increasing variation as the level of the series increases, then a transformation can be useful. Some common transformations to stabilize the vartiation are: 
+
+- Square root: $w_t = \sqrt{y_t}$
+- Cube root: $w_t = \sqrt[3]{y_t}$
+- Logarithm: $w_t = log(y_t)$
+- Inverse: $w_t = -y_t^{-1}$
+
+```{r}
+autoplot(usmelec) +
+  xlab("Year") +
+  ylab("") +
+  ggtitle("US monthly net electricity generation")
+
+autoplot(log(usmelec)) +
+  xlab("Year") +
+  ylab("") +
+  ggtitle("Log electricity generation")
+
+autoplot(-1/usmelec) +
+  xlab("Year") +
+  ylab("") +
+  ggtitle("Log electricity generation")
+
+```
+
+From the three transformations it seems as if we'd like to have something in between the `log`-transformation and the `inverse`-transformation. This is where the family of **Box-Cox transformations** come into play.
+
+The **Box-Cox transformation** has a single parameter, $\lambda$, which controls how strong the transformation is: 
+
+- $w_t = log(y_t)$,if $\lambda = 0$ 
+- $w_t = (y_t^\lambda - 1) / \lambda$, if $\lambda \neq 0$
+
+This leads to the following transformations for different parameters of $lambda$.
+
+- $\lambda = 1$: No substantive transformation (subtracting 1 from every observation)
+- $\lambda = \frac{1}{2}$: Square root plus linear transformation
+- $\lambda = \frac{1}{3}$: Cube root plus linear transformation
+
+An estimate of lambda, which roughly balances the variance can be obtained using the `BoxCox.lambda()` function. 
+
+```{r}
+# Estimate for lambda
+lmd <- BoxCox.lambda(usmelec)
+
+autoplot(BoxCox(usmelec, lmd)) +
+  xlab("Year") +
+  ylab("") +
+  ggtitle("Box-Cox: Electricity generation")
+
+# Apply this to ets function
+usmelec %>% 
+  ets(lambda = lmd) %>% 
+  forecast(h = 60) %>% 
+  autoplot()
+```
+
+Here, R uses lmd for the Box-Cox transformation applies this to the chosen model and fits the model. Then, it passes this to the forecast function together with inforamtion on the transformation yielding in back-transformed forecasts for the series. Note that the ets function itself can take care of the varying fluctuations and that the combination of ets and Box-Cox transformation is not taht common.
+
+```{r}
+
+# Plot the data
+autoplot(h02)
+
+# Take logs and seasonal differences of h02
+difflogh02 <- diff(log(h02), lag = 12)
+
+# Plot difflogh02
+autoplot(difflogh02)
+
+# Take another difference and plot
+ddifflogh02 <- diff(difflogh02)
+autoplot(ddifflogh02)
+
+# Plot ACF of ddifflogh02
+ggAcf(ddifflogh02)
+
+```
+
+### ARIMA models
+AR(p) models are multiple regression with p lagged observations as predictors and MA(q) models are multiple regression with q lagged errors as predictors. More information see Course 2 and Course 3. Together they are called ARMA(p,q) model as multiple regression with p lagged observations and q lagged errors as predictors. ARMA(p,q) works only with stationary data. That's where the I in ARIMA comes into play. A model that is integrated of order d is an ARIMA(p,d,q) model. 
+```{r}
+autoplot(usnetelec) +
+  xlab("Year") +
+  ylab("billion kwh") +
+  ggtitle("US net electricity generation")
+```
+
+The `auto.arima()`function chooses an ARIMA function on its own:
+
+```{r}
+fit <- auto.arima(usnetelec)
+summary(fit)
+
+fit %>% 
+  forecast(h=10) %>% 
+  autoplot()
+
+```
+
+The `auto.arima()` function selects the number of differences d via unit root tests and afterwards select p and q by minimizin AICc. Parameters are estimated using maximum likelihood estimation. 
+
+```{r}
+# Fit an automatic ARIMA model to the austa series
+fit <- auto.arima(austa)
+
+# Check that the residuals look like white noise
+checkresiduals(fit)
+residualsok <- TRUE
+
+# Summarize the model
+summary(fit)
+
+# Plot forecasts of fit
+fit %>% forecast(h = 10) %>% autoplot() 
+
+# Plot forecasts from an ARIMA(0,1,1) model with no drift
+austa %>% Arima(order = c(0,1,1), include.constant = FALSE) %>% forecast() %>% autoplot()
+
+# Plot forecasts from an ARIMA(2,1,3) model with drift
+austa %>% Arima(order=c(2,1,3), include.constant=TRUE) %>% forecast() %>% autoplot()
+
+# Plot forecasts from an ARIMA(0,0,1) model with a constant
+austa %>% Arima(order=c(0,0,1), include.constant=TRUE) %>% forecast() %>% autoplot()
+
+# Plot forecasts from an ARIMA(0,2,1) model with no constant
+austa %>% Arima(order=c(0,2,1), include.constant=FALSE) %>% forecast() %>% autoplot()
+
+```
+
+The AICc statistic is useful for selecting between models in the same class. For example, you can use it to select an ETS model or to select an ARIMA model. However, you cannot use it to compare ETS and ARIMA models because they are in different model classes. Instead, you can use time series cross-validation to compare an ARIMA model and an ETS model on the austa data. Because tsCV() requires functions that return forecast objects, you will set up some simple functions that fit the models and return the forecasts. The arguments of tsCV() are a time series, forecast function, and forecast horizon h. 
+
+```{r}
+# Set up forecast functions for ETS and ARIMA models
+fets <- function(x, h) {
+  forecast(ets(x), h = h)
+}
+farima <- function(x, h) {
+  forecast(auto.arima(x), h = h)
+}
+
+# Compute CV errors for ETS as e1
+e1 <- tsCV(austa, fets, 1)
+
+# Compute CV errors for ARIMA as e2
+e2 <- tsCV(austa, farima, 1)
+
+# Find MSE of each model class
+mean(e1^2, na.rm=TRUE)
+mean(e2^2, na.rm=TRUE)
+
+# Plot 10-year forecasts using the best model class
+austa %>% farima(h=10) %>% autoplot()
+```
+
+### Seasonal ARIMA models
+
+```{r}
+# Seasonal arima with auto.arima()
+autoplot(debitcards) +
+  xlab("Year") + 
+  ylab("million ISK") +
+  ggtitle("Retail debit card usage in Iceland")
+
+# Increasing variation -> Box-Cox
+lmd <- BoxCox.lambda(debitcards)
+# Use auto.arima to fit seasonal model
+fit <- auto.arima(debitcards, lambda = lmd)
+fit
+
+# Forecasting and plotting
+fit %>% 
+  forecast(h =36) %>% 
+  autoplot() + xlab("Year")
+
+### h02 data ###
+# Check that the logged h02 data have stable variance
+h02 %>% log() %>% autoplot()
+
+# Fit a seasonal ARIMA model to h02 with lambda = 0
+fit <- auto.arima(h02, lambda=0)
+
+# Summarize the fitted model
+summary(fit)
+
+# Record the amount of lag-1 differencing and seasonal differencing used
+d <- 1
+D <- 1
+
+# Plot 2-year forecasts
+fit %>% forecast(h=24) %>% autoplot()
+
+### euretail ###
+# Find an ARIMA model for euretail
+fit1 <- auto.arima(euretail)
+
+# Don't use a stepwise search
+fit2 <- auto.arima(euretail, stepwise = FALSE)
+
+# AICc of better model
+AICc <- 68.39
+
+# Compute 2-year forecasts from better model
+fit2 %>% forecast(h=8) %>% autoplot()
+
+```
+
+Comparing auto.arima() and ets() on seasonal data.
+
+```{r}
+# Use 20 years of the qcement data beginning in 1988
+train <- window(qcement, start = c(1988,1), end = c(2007,4))
+
+# Fit an ARIMA and an ETS model to the training data
+fit1 <- auto.arima(train)
+fit2 <- ets(train)
+
+# Check that both models have white noise residuals
+checkresiduals(fit1)
+checkresiduals(fit2)
+
+# Produce forecasts for each model
+fc1 <- forecast(fit1, h = 25)
+fc2 <- forecast(fit2, h = 25)
+
+# Use accuracy() to find better model based on RMSE
+accuracy(fc1, qcement)
+accuracy(fc2, qcement)
+bettermodel <- fit2
+
+```
+

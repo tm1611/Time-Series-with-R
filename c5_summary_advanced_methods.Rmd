@@ -1,0 +1,266 @@
+---
+title: "Advanced Methods"
+author: "Timo Meiendresch"
+date: "4 February 2019"
+output: html_document
+---
+
+```{r, message=FALSE, echo=FALSE}
+rm(list=ls())
+graphics.off()
+```
+
+```{r, message=FALSE}
+library("astsa")
+library("ggplot2")
+library("forecast")
+library("fpp2")
+```
+
+# Advanced methods
+
+## Dynamic Regression
+Combine external information with previous observations of the time series. Until now, we only used the time series itself. Now we'll add external information to describe today's value of $y_t$. Regression model with ARIMA errors. 
+
+$$y_t = \beta_0 + \beta_1 x_{1,t} + ... + \beta_r x_{r,t} + e_t$$
+
+The information on past observations of $y_t$ is included in the error term. 
+
+```{r}
+autoplot(uschange[, 1:2], facets =TRUE) +
+  xlab("Year") + ylab("") +
+  ggtitle("Quarterly changes in US consumption and personal income")
+```
+
+It seems as if there is some connection between these two series as one might expect that consumption increases if Income increases and v.v. Use a scatterplot to have a closer look at how these variables are related. 
+
+```{r}
+ggplot(aes(x = Income, y=Consumption),
+       data=as.data.frame(uschange))+
+  geom_point() + 
+  ggtitle("Quarterly changes in US consumption and personal income") + 
+  geom_smooth(method=lm, se=FALSE) + 
+  geom_quantile(col="red", quantiles = c(0.25,0.5,0.75))
+
+fit1 <- lm(Consumption ~ Income, data=as.data.frame(uschange))
+summary(fit1)
+
+```
+
+It seems that there is a considerable relation which can be used to improve our model. 
+
+```{r}
+# fit using auto.arima
+fit <- auto.arima(uschange[,"Consumption"], xreg = uschange[, "Income"])
+fit
+
+```
+
+The coefficient for `xreg` is `r round(fit$coef[5],4)`, which means that if Income increases by one percentage point, Consumption increases by `r round(fit$coef[5],4)*100` percentage points. Regression part takes account of predictor variable, while the ARIMA model takes care of the short-term time series dynamics.
+
+```{r}
+checkresiduals(fit)
+
+```
+
+Null hypothesis of white noise cannot be rejected, which means that these residual do look like white noise.
+
+```{r}
+# Forecast a model, assuming Income change is equal to mean for the forecasted values
+fcast <- forecast(fit, xreg=rep(mean(uschange[,"Income"]), 12))
+autoplot(fcast) +
+  xlab("Year") + 
+  ylab("Percentage change")
+
+
+```
+
+### Forecasting sales using advertising
+
+```{r}
+# Time plot of both variables
+autoplot(advert, facets=TRUE)
+
+# Fit ARIMA model
+fit <- auto.arima(advert[, "sales"], xreg = advert[, "advert"], stationary = TRUE)
+
+# Check model. Increase in sales for each unit increase in advertising
+salesincrease <- coefficients(fit)[3]
+
+# Forecast fit as fc
+fc <- forecast(fit, xreg = rep(10, 6))
+
+# Plot fc with x and y labels
+autoplot(fc) + xlab("Month") + ylab("Sales")
+```
+
+### Forecasting electricity demand
+
+```{r}
+# Time plots of demand and temperatures
+#autoplot(elec[, c("Demand", "Temperature")], facets = TRUE)
+
+# Matrix of regressors
+#xreg <- cbind(MaxTemp = elec[, "Temperature"], MaxTempSq = elec[,"Temperature"]^2, Workday = elec[,"Workday"])
+
+# Fit model
+#fit <- auto.arima(elec[,"Demand"], xreg = xreg)
+
+# Forecast fit one day ahead, temp = 20, wday=1
+#forecast(fit, xreg = cbind(20, 20^2, 1))
+```
+
+
+### Dynamic harmonic regression
+
+Based on pairs of Fourier terms. 
+
+- Every periodic function can be approximated by sums of sin and cos terms for large enough K.
+- Regression coefficients: $\alpha_k$ and $\gamma_k$
+- $e_t$ can be modeled as a non-seasonal ARIMA process.
+- Assumes seasonal pattern does not change over time
+
+```{r}
+cafe <- window(auscafe, start=2005)
+autoplot(cafe)
+
+fit <- auto.arima(cafe, xreg = fourier(cafe, K=5),
+                  seasonal = FALSE, lambda=0)
+
+fit %>% 
+  forecast(xreg = fourier(cafe, K=5, h=24)) %>% 
+  autoplot() + ylim(1.6, 5.1)
+
+```
+
+- Other predictor variables can be added as well: $x_{t,1}, ...., X_{t,r}$
+- Choose K to minimize the AICc
+- Advantage of Fourier: They can handle seasonality when m (frequency) becomes very large -> weekly, daily, and sub-daily...
+
+```{r}
+# Set up harmonic regressors of order 13
+harmonics <- fourier(gasoline, K = 13)
+
+# Fit regression model with ARIMA errors
+# seasonal is false because seasonality is handled by regressors
+fit <- auto.arima(gasoline, xreg = harmonics, seasonal = FALSE)
+
+# Forecasts next 3 years
+newharmonics <- fourier(gasoline, K = 13, h = 156)
+fc <- forecast(fit, xreg = newharmonics)
+
+# Plot forecasts fc
+autoplot(fc)
+```
+ 
+#### Forecasting electricity demand 
+
+```{r}
+# Fit a harmonic regression using order 10 for each type of seasonality
+fit <- tslm(taylor ~ fourier(taylor, K = c(10, 10)))
+
+# Forecast 20 working days ahead
+fc <- forecast(fit, newdata = data.frame(fourier(taylor, K = c(10,10), h = 960)))
+
+# Plot the forecasts
+autoplot(fc)
+
+# Check the residuals of fit
+checkresiduals(fit)
+
+# Residuals fail the tests badly, yet the forecasts are good
+```
+
+#### Forecasting call bookings
+
+```{r}
+# Plot the calls data
+autoplot(calls)
+
+# Set up the xreg matrix
+xreg <- fourier(calls, K = c(10,0))
+
+# Fit a dynamic regression model
+fit <- auto.arima(calls, xreg=xreg, seasonal = FALSE, stationary = TRUE)
+
+# Check the residuals
+checkresiduals(fit)
+
+# Plot forecasts for 10 working days ahead
+fc <- forecast(fit, xreg =  fourier(calls, c(10, 0), h = 1690))
+autoplot(fc)
+
+```
+
+The residuals in this case still fail the white noise tests, but their autocorrelations are tiny, even though they are significant. This is because the series is so long. It is often unrealistic to have residuals that pass the tests for such long series. The effect of the remaining correlations on the forecasts will be negligible.
+
+### TBATS model 
+Combines many models into one automated framework:
+
+- Trigonometric terms for seasonality
+- Box-Cox transformations for heterogeneity
+- ARMA models for short-term dynamics
+- Trend (possibly damped)
+- Seasonal (including multiple and non-integer periods)
+
+Automated framework can be dangerous! Easy to use and it does everything for you: 
+
+```{r}
+gasoline %>% 
+  tbats() %>% 
+  forecast() %>% 
+  autoplot() + xlab("Year") + ylab("thousand barrels per day")
+
+```
+
+- 1: Box-cox parameter, meaning no transformation
+- {0,0} is ARMA(p,q) error, so no arma error and just white noise error
+- "-" is damping parameter, meaning no damping
+- Last part is on fourier: seasonal part is 52.18 (weeks of the year), 14 fourier-like terms selected.
+
+```{r}
+calls %>%
+  window(start=20) %>% 
+  tbats() %>% 
+  forecast() %>% 
+  autoplot() + xlab("weeks") + ylab("calls")
+```
+
+Here we see that there are two fourier terms as there are two types of seasonality:
+
+- 169 5-minute perids a day (6 pairs of terms)
+- 845 periods in a 5-day working week (4 pairs of terms)
+
+Summary TBATS: 
+
+- Handles non-integer seasonality, multiple seasonal periods
+- Entirely automated
+- Predition intervals often too wide
+- very slow on long series
+
+
+```{r}
+# Plot the gas data
+autoplot(gas)
+
+# Fit a TBATS model to the gas data
+fit <- tbats(gas)
+
+# Forecast the series for the next 5 years
+fc <- forecast(fit, h= 60)
+
+# Plot the forecasts
+autoplot(fc)
+
+# Record the Box-Cox parameter and the order of the Fourier terms
+lambda <- 0.082
+K <- 5
+
+```
+
+The gas data contains Australian monthly gas production. A plot of the data shows the variance has changed a lot over time, so it needs a transformation. The seasonality has also changed shape over time, and there is a strong trend. This makes it an ideal series to test the tbats() function which is designed to handle these features.
+
+Note that the book on which this summary was based is online [here](https://otexts.com/fpp2/).
+
+
+

@@ -1,0 +1,431 @@
+---
+title: "ARIMA Modeling"
+author: "Timo Meiendresch"
+date: "27 January 2019"
+output: html_document
+---
+
+# ARIMA Modeling
+
+```{r, message=FALSE, echo=FALSE}
+rm(list=ls())
+graphics.off()
+```
+
+Some example of time series with various qualities. For example the `AirPassengers` data from Box and Jenkins show seasonality, trend and heteroscedasticity, which distinguishes the data from white noise.
+
+```{r, message=FALSE}
+# load required packages
+library(astsa)
+library(xts)
+
+# Johnson Johnson
+ts.plot(jj, main= "JJ Quarterly Earnings per share")
+text(jj, labels= 1:4, col= 1:4)
+
+# global temperature
+plot(globtemp, main="Global Temperature Deviations", type= "o")
+
+# SP 500 weekly returns
+plot(sp500w, main= "S&P 500 Weekly Returns")
+
+# Classic Box Jenkins data
+plot(AirPassengers)
+```
+ 
+
+ 
+## Chapter 1: Time Series Data and Models 
+Recall from usual regression model: 
+$$Y_i = \beta X_i + \epsilon_i$$, where errors $\epsilon_i$ are: 
+
+- independent 
+- normal 
+- homoskedastic
+
+Hence, they are *White Noise* which is an important concept in time series modeling. Simple autoregression model: 
+
+$$X_t = \phi X_{t-1} + \epsilon_t$$
+where $\epsilon_t$ is white noise. In addition, we also may have the problems that the errors are correlated. To overcome this problem a moving average model can be used:
+$$\epsilon_t = W_t + \theta W_{t-1}$$
+with $W_t$ as white noise. Putting both elements together leads to the ARMA model:
+$$X_t = \phi X_{t-1} + W_t + \theta W_{t-1}$$
+This model has autoregression with autocorrelated errors. 
+
+### Stationarity and Nonstationarity
+A time series is stationary when it is *stable*, meaning: 
+
+- Mean is constant over time (no trend)
+- Correlation structure remains constant over time
+
+If the mean is constant we can estiamte it by the sample mean $\overline{x}$. Pairs `(x1, x2), (x2,x3), ...` can be used to estimate correlation on different lags (here for lag 1  correlation). 
+
+For some nonstationary series it is enough take first differences to make the series stationary (works for trend as well). In case that a series has a trend an changes in variability use a combination of log and differencing. First log, then difference. Logging can stabilize the variance, differencing detrends the data subsequently.
+
+#### Dealing with trend and heteroscedasticity
+Data generating process can often be described in the following way:
+$$X_t = (1+p_t) X_{t-1}$$
+It can be shown that the growth rate $p_t$ can be approximated by:
+$$Y_t = log X_t - log X_{t-1} \approx p_t$$
+
+```{r}
+# Plot GNP series (gnp) and its growth rate
+par(mfrow = c(2,1))
+plot(gnp)
+plot(diff(log(gnp)))
+
+
+# Plot DJIA closings (djia$Close) and its returns
+par(mfrow = c(2,1))
+plot(djia$Close)
+plot(diff(log(djia$Close)))
+
+```
+
+### Stationary Time Series: ARMA
+Why ARMA models for stationary time series? Wold proved that any stationary time series may be represented as a linear combination of white noise. This is called the **Wold Decomposition**:
+$$ X_t = W_t + a_1 W_{t-1} + a_2 W_{t-2} + ...$$
+with constants $a_1, a_2,...$. Any ARMA model has this form, which means they are well suited to model stationary time series. 
+
+The function `arima.sim()`can be used to simulate ARMA models.
+
+```{r}
+# Generate and plot white noise
+WN <- arima.sim(model = list(order = c(0,0,0)), n = 200)
+plot(WN)
+
+# Generate and plot an MA(1) with parameter .9 
+MA <- arima.sim(model = list(order = c(0,0,1), ma=0.9), n= 200)
+plot(MA)
+
+# Generate and plot an AR(2) with parameters 1.5 and -.75
+AR <- arima.sim(model = list(order = c(2,0,0), ar=c(1.5, -0.75)), n= 200)
+plot(AR)
+
+```
+
+## Chapter 2: Fitting ARMA models
+Identifying right specification of ARMA models from data is difficult as they often look very similar. You can not identify the model simply by looking at the data. The tools that are used are the autocorrelation function (ACF) and Partial autocorrelation function (PACF).
+
+| Function  | AR(p)          | MA(q)          | ARMA(p,q)  |
+|-----------|----------------|----------------|------------|
+| ACF       | Tails off      | cuts off lag q | Tails off  |
+| PACF      | Cuts off lag p | Tails off      | Tails  off |
+
+```{r}
+AR <- arima.sim(model = list(order = c(2,0,0), ar=c(0.7,-0.7)), n= 2000)
+
+plot(ts(sample(AR, 100)))
+par(mfrow=c(1,2))
+acf(AR)
+pacf(AR)
+```
+
+The PACF cuts off after 2 lags of the AR(2) process and tails off in the ACF. 
+
+```{r}
+MA <- arima.sim(model = list(order = c(0,0,1),ma = c(0.5)), n= 2000)
+plot(ts(sample(MA, 100)))
+par(mfrow=c(1,2))
+acf(MA)
+pacf(MA)
+
+```
+
+ACF cuts off after lag 1 and PACF tails off. If both ACF and PACF tail off, then we probably deal with an ARMA model. 
+
+Estimation for time series is similar to OLS for regression. 
+
+```{r message=FALSE}
+x <- arima.sim(list(order=c(2, 0, 0),
+               ar = c(1.5, -0.75)),
+               n = 200) + 50
+
+arima(x, order = c(2,0,0))
+
+# Generate 100 observations from the AR(1) model
+x <- arima.sim(model = list(order = c(1, 0, 0), ar = .9), n = 100) 
+
+# Plot the generated data 
+plot(x)
+
+# Plot the sample P/ACF pair
+acf2(x,)
+
+# Fit an AR(1) to the data and examine the t-table
+sarima(x, p=1, d=0, q=0, details = FALSE)$ttable
+
+```
+
+### AR and MA together: ARMA
+Have a look at an ARMA(1,1) model:
+$$X_t = \phi X_{t-1} + W_t + \theta W_{t-1}$$
+It can be thought of as auto-regression with correlated errors. 
+
+```{r}
+x <- arima.sim(model = list(order=c(1,0,1), 
+                            ar = 0.9,
+                            ma = -0.4), 
+                            n=500)
+
+plot(x, main= "ARMA(1,1)")
+acf2(x)
+```
+
+For an ARMA(p,q) model both functions of ACF as well as PACF tail off (PACF decreases fast). Note that you can not determine neither p nor q based on these graphics, just that is an ARMA model. Best thing to do: 
+
+- Start with a small model and compare the performance when adding p and/or q terms
+
+```{r}
+x <- arima.sim(list(order = c(1,0,1),
+                    ar = 0.9,
+                    ma = -0.4),
+               n= 500) + 50
+x_fit <- sarima(x, p = 1, d = 0, q = 1, details = FALSE)
+x_fit$ttable
+
+```
+
+### Model Choice and Residual Analysis
+In general it is a good idea to fit several models and compare their performance before choosing one. The two most populat measures to decide which model is the best are the **Akaike Information criterion (AIC)** and the **Bayes-Schwartz Information criterion (BIC)**.
+
+In general, the error decreases as more parameters are added regardless of additional variables are adding value to the model. AIC and BIC measure the error and penalize (different penalty terms) for adding parameters. The BIC has a bigger penalty than the AIC, i.e.:
+
+- AIC: `k = 2`
+- BIC: `k = log(n)`
+
+```{r}
+# growth rate gnp
+gnpgr <- diff(log(gnp))
+
+# Compare AR(1) vs. MA(2)
+fit1 <- sarima(gnpgr, p=1, d= 0, q = 0, details = FALSE)
+fit1$AIC
+fit1$BIC
+
+fit2 <- sarima(gnpgr, p=0, d= 0, q = 2, details = FALSE)
+fit2$AIC
+fit2$BIC
+
+```
+
+The AIC and BIC for the first, simpler AR(1) model is lower (more negative) than the second one. Hence, this model is preferred over the MA(2) model.
+
+Using the `sarima()` function with default `display = TRUE` outputs additional information on the residuals. 
+
+1. The standardized residual plot should be suspected for patterns. They should behave as a white noise sequence with mean zero variance one. 
+2. ACF of residuals should look like that of white noise. If the model is correct residuals ought to be white noise. Values should be between blue dashed lines
+3. QQ plot assesses normality. Examine qq plot for departures from normality and to identify outliers. 
+4. Use Q-statistic plot to help test for departures from whiteness of the residuals. The p-values for the Ljung box statistic should be above the blue line so you can assume the residuals is white noise. If many points are below the line then another model should be considered as there is still some correlation left in the residuals. 
+
+In particular, you should be wary in case there are obvious patterns of autocorrelation in the residual plot, ACF of the residuals has large, significant values and Q-statistic has all points below line. 
+
+```{r}
+# Analysis Oil
+ts.plot(oil)
+
+# Calculate approximate oil returns
+oil_returns <- diff(log(oil))
+
+# Plot oil_returns. Notice the outliers.
+plot(oil_returns)
+
+# Plot the P/ACF pair for oil_returns
+par(mfrow=c(1,2))
+acf(oil_returns)
+pacf(oil_returns)
+# acf2(oil_returns)
+
+# Assuming both P/ACF are tailing, fit a model to oil_returns
+sarima(oil_returns, p=1, d=0, q=1)
+
+```
+
+## Ch. 3 ARIMA
+A time series exhibits ARIMA behavior if the differenced data has ARMA behavior.
+
+```{r}
+# Simulation ARIMA
+x <- arima.sim(list(order = c(1,1,0), ar=0.9), n=200)
+plot(x, main = "ARIMA(1,1,0)")
+plot(diff(x), main ="ARMA (1,0,0)")
+
+# ACF and PCF of an integratged ARMA
+acf2(x)
+acf2(diff(x))
+
+```
+
+The P/ACF of the differenced series indicates an AR(1) model as the partial correlation cuts off after one lag, whereas the autocorrelation slowly fades off. Let's look at real data now (global temperatures in astsa package).
+
+ARIMA diagnostics are the same as in the ARMA case (we used differenced series most of the time anyway). Hence, statements about P/ACF, AIC, BIC, etc. apply in the same way. 
+
+```{r}
+# Plot the sample P/ACF pair of the differenced data 
+acf2(diff(globtemp))
+
+# Fit an ARIMA(1,1,1) model to globtemp
+sarima(globtemp, p=1, d=1, q=1)
+
+# Fit an ARIMA(0,1,2) model to globtemp. Which model is better?
+sarima(globtemp, p=0, d=1, q=2)
+```
+
+Forecasting can be done using the `sarima.for()` function. Here, the forecast horizon has to be specified. 
+
+```{r}
+# Use the weekly data for oil prices
+
+# Subset for forecasting 
+oil <- window(astsa::oil, end=2006)
+
+# full data do be displayed
+oilf <- window(astsa::oil, end = 2007)
+
+# Now: Do the forecast 52 weeks ahead
+sarima.for(oil, n.ahead = 52, p=1, d=1, q=1)
+lines(oilf)
+
+###
+# Fit an ARIMA(0,1,2) to globtemp and check the fit
+sarima(globtemp, p=0, d=1, q=2)
+
+# Forecast data 35 years into the future
+sarima.for(globtemp, n.ahead=35, p=0, d=1, q=2)
+```
+
+## Ch. 4: Seasonal Models
+Often data have known seasonal components (cyclic behavior). E.g. yearly cycles (1 cycle every S=12 months), quarterly cycles (1 cycle every S=4 quarters), etc. 
+
+### Pure Seasonal Models
+
+It is instructed to start with pure seasonal models (although not always realistic). These types of models are typically formalized as: 
+$$X_t = \phi X_{t-12} + W_t$$
+which is an AR(1) model at seasonal level of 12 lags. This model describes today's value as being determined by the weighted value 12 months ago and some noise. The behavior of these models is exactly as before (see table) but we are now operating on the level of the cycle.
+
+### Mixed Seasonal Model
+Mixed model: $$SARIMA(p,d,q) \times (P, D, Q)_s $$
+where lowercase letters indicate the nonseasonal components, capital letters indicate seasonal components, and s indicates the season length. 
+
+Use the `AirPassengers` data for analysis of the seasonal behavior:
+
+```{r, results="hide"} 
+x <- AirPassengers
+
+ts.plot(x)
+# Stabilize var by logging
+ts.plot(log(x))
+# detrend by taking first difference
+ts.plot(diff(log(x)))
+# Seasonal persistence. Note that we take the diff of differences
+ts.plot(diff(diff(log(x)),12))
+acf2(diff(diff(log(x)),12))
+```
+
+Observations: 
+- Seasonal: ACF cutting off at lag 1s (S=12) and PACF tailing off lags 1s, 2s, 3s...
+ - Suggests seasonal MA(1) -> P=0,Q=1
+- Nonseasonal: ACF and PACF both tailing off.
+ - Suggests p=1, q=1
+
+Appropriate model seems to be a model with:
+
+ - p=1, d=1, q=1, P=0, D=1, Q=1, S=12
+ 
+```{r}
+fit1 <- sarima(log(x), 
+       p=1, d=1, q=1, 
+       P=0, D=1, Q=1, S=12, details = FALSE)
+fit1$ttable
+```
+
+```{r, results="hide"}
+# Take out ar component because it is not significant
+sarima(log(x), 
+       p=1, d=1, q=1, 
+       P=0, D=1, Q=1, S=12, details=FALSE)
+```
+ 
+```{r, results="hide"}
+# Plot unemp 
+plot(unemp)
+
+# Difference your data and plot it
+d_unemp <- diff(unemp)
+plot(d_unemp)
+
+# Seasonally difference d_unemp and plot it
+dd_unemp <- diff(d_unemp, lag = 12)  
+plot(dd_unemp)
+
+# Plot P/ACF pair of fully differenced data to lag 60
+dd_unemp <- diff(diff(unemp), lag = 12)
+
+# Look at P/ACF and deduce what model seems appropriate
+acf2(dd_unemp)
+
+# Fit an appropriate model
+sarima(unemp, p=2, d=1, q=0, P=0, D=1, Q=1, S=12)
+```
+
+Short explanation (compare to `dd_unemp`):
+- Seasonal: ACF cuts off after one lag (Q=1), PACF tails off (P=0).
+- Non-seasonal: ACF tails off (q=0), PACF cuts off after 2 lags (p=2)
+- Hence, using `unemp` with a `SARIMA(p=2, d=1, q=0, P=0, D=1, Q=1, S=12) seeems reasonable.
+
+```{r, results="hide"}
+# Fit data to a commidity: Chicken
+plot(chicken)
+
+# Plot differenced chicken
+plot(diff(chicken))
+
+# Plot P/ACF pair of differenced data to lag 60
+acf2(diff(chicken), max.lag=60)
+
+# Fit ARIMA(2,1,0) to chicken - not so good
+sarima(chicken, p=2, d=1, q=0)
+
+# Fit SARIMA(2,1,0,1,0,0,12) to chicken - that works
+sarima(chicken, p=2, d=1, q=0, P=1, D=0, Q=0, S=12)
+```
+
+Website with various commodity prices: [index mundi](https://www.indexmundi.com/commodities/)
+
+Forecasting ARIMA Processes can simply be done using the `sarima.for()`function. 
+
+```{r, results="hide"}
+# Recall SARIMA (0,1,1)x(0,1,1)_12 model for the AirPassenger data
+x <- AirPassengers
+
+x_mat <- matrix(data = c(diff(x)[1],diff(x)), ncol=12, byrow=TRUE)
+plot(x = colMeans(x_mat), type="b", main="Monthly means", xlab="month", ylab="mean")
+abline(h = mean(diff(x)), col="blue", lty=2)
+
+# 24 months forecast.
+sarima.for(log(AirPassengers), n.ahead=24,
+           0,1,1,
+           0,1,1,12)
+
+## Forecast for unemp
+# Fit your previous model to unemp and check the diagnostics
+sarima(unemp, 2,1,0,0,1,1,12)
+
+# Forecast the data 3 years into the future
+sarima.for(unemp, n.ahead=36, 2,1,0,  0,1,1,  12)
+
+```
+
+```{r, results="hide"}
+
+# Forecasting commodities: Chicken
+sarima.for(chicken, n.ahead= 60, p=2, d=1, q=0, P=1, D=0, Q=0, S=12 )
+```
+
+
+
+
+
+
+
+

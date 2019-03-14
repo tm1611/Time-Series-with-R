@@ -1,0 +1,480 @@
+---
+title: "Manipulating Time Series Data in R: Case Study"
+author: "Timo Meiendresch"
+date: "8 March 2019"
+output: html_document
+---
+
+```{r, message=FALSE, echo=FALSE}
+rm(list=ls())
+graphics.off()
+```
+
+```{r, message=FALSE}
+library("xts")
+library("readr")
+
+```
+
+### Review
+
+- What are xts objects? Time index + Matrix of values
+
+## Case Study 1: Flight Data
+Data set consists of flight delays and cancellations, 2010 through 2015. 
+
+```{r}
+# read RData directly from datacamp
+flights <- readRDS(gzcon(url("https://assets.datacamp.com/production/course_1964/datasets/flights.RData")))
+
+# Check data
+head(flights)
+str(flights)
+
+# Notice that date is "chr" and convert it
+flights$date <- as.Date(flights$date)
+
+# Convert data to xts
+flights_xts <- as.xts(flights[ , -5], order.by = flights$date)
+```
+
+
+### Manipulating and visualizing the data
+
+- Manipulate and explore the data
+- Check periodicity: Units of time in the data (`periodicity`)
+- plot data using `plot` and `plot.xts`
+
+```{r}
+# periodicity
+periodicity(flights_xts)
+
+# periods
+nmonths(flights_xts)
+
+# select one month
+flights_xts["2014-06"]
+
+# plotting 
+plot.xts(x= flights_xts$total_flights)
+plot.xts(flights_xts$delay_flights)
+plot.zoo(flights_xts, plot.type = "multiple", ylab = labels(flights_xts)[[2]])
+
+plot.zoo(flights_xts, plot.type = "single", lty = c(1,2,3,4))
+# legend("right", lty = lty, legend = labels)
+
+# Calculate percentages
+flights_xts$pct_delay <- (flights_xts$delay_flights / flights_xts$total_flights ) * 100
+
+plot.xts(flights_xts$pct_delay)
+
+flights_xts$pct_cancel <- (flights_xts$cancel_flights/flights_xts$total_flights)*100
+
+flights_xts$pct_divert <- (flights_xts$divert_flights/flights_xts$total_flights)*100
+
+#plot all percentages
+plot.zoo(x = flights_xts[ , c("pct_delay", "pct_cancel", "pct_divert")])
+
+
+```
+
+### Saving as rds
+
+- Use `saveRDS()`and `readRDS()` for your own use: maintains time index of xts objects
+- Therefore, this is the preferred method to save xts data for a later revisit 
+
+Saving as CSV in case other people use a different programming tool.
+
+- `write.zoo()` and `read.zoo()`
+
+```{r}
+# Export your xts object to a csv file using write.zoo
+write.zoo(flights_xts, file = "flights_xts.csv", sep = ",")
+
+# Open your saved object using read.zoo
+flights2 <- read.zoo("flights_xts.csv", sep = ",", FUN = as.Date, header = TRUE, index.column = 1)
+
+# Encode your new object back into xts
+flights_xts2 <- as.xts(flights2)
+
+# Examine the first five rows of your new flights_xts2 object
+head(flights_xts2, n=5)
+```
+
+## Case Study 2: Weather Data
+
+### Merging using `rbind`
+Merging xts objects using rbind preserves the order of the data
+
+Combining is not necessary here but rbind can be used to combine various temperature dataset (eg. two data sets from different periods can be combined to one).
+
+Example uses the Boston Weather Data: 
+
+```{r}
+# load temperature data
+temps <- readRDS(gzcon(url("https://assets.datacamp.com/production/course_1964/datasets/temps_monthly.RData
+")))
+
+head(temps)
+str(temps)
+summary(temps)
+
+# identify periodicity 
+periodicity(temps)
+
+# basic plot 
+plot(temps)
+
+plot.xts(first(temps, "6 months"))
+plot.xts(temps["2010-11/2012-04"])
+
+```
+
+### Merging time seies data by column using `cbind`
+
+First step is to check periodicity and coverage of the data. If we want to merge these data it is necessary that periodicity and coverage is identical. If this is not the case we can subset one dataset which encompasses the other or convert periodicity. 
+
+- To convert the periodicity of xts objects, we can use the `to.period()` function. 
+
+
+```{r}
+# check periodicity
+periodicity(flights_xts)
+periodicity(temps)
+
+# bind by col (merge)
+head(cbind(flights_xts, temps))
+flights_temps <- merge(flights_xts, temps)
+
+# plot.zoo two cols in a single panel
+plot.zoo(flights_temps[,c("pct_delay", "temps")], plot.type="single", lty=c(1,2))
+legend("topright", lty = c(1,2) , bg = "white", legend=c("pct_delay","temps"))
+
+# add flights cancelled ...
+
+```
+
+### Time Series data workflow
+
+1. Encode all time series objects to xts
+2. Examine and adjust periodicity
+3. Merge xts objects and examine 
+
+**Next:** 
+Assess the hypothesis that flight delays are a function of visibility and wind. In order to do this, we add a few more cols by merging average visibility and wind speeds 
+
+
+```{r}
+# load wind data
+wind <- readRDS(gzcon(url("https://assets.datacamp.com/production/course_1964/datasets/wind.RData")))
+
+head(wind)
+str(wind)
+periodicity(wind)
+
+# load visibility data
+vis <- readRDS(gzcon(url("https://assets.datacamp.com/production/course_1964/datasets/vis.RData")))
+head(vis)
+str(vis)
+periodicity(vis)
+
+```
+
+Fortunately, the data has already been prepared to cover the same time period with modified periodicity. 
+
+```{r}
+# merge data after checking them
+head(flights_temps)
+periodicity(flights_temps)
+periodicity(vis)
+periodicity(wind)
+
+flights_weather <- merge(flights_temps, vis, wind)
+
+# plot pct delay, wind, and visibility
+plot.zoo(x = flights_weather[, c("pct_delay", "vis", "wind")], plot.type = "multiple", lty=c(1:3) )
+
+
+```
+
+- No clear relationships between visibility or wind and delayed flights
+- flatline data on visibility prior to 2012 seems odd and should be examined (data quality problems?)
+
+## Case Study 3: Economic Data
+
+### Handling missingness
+Common way is to fill NAs with last observation. 
+
+- Last observation carried forward (LOCF): `na.locf()`
+- Next observation carried backward (NOCB): `na.locf(data, fromLast = TRUE)`
+- Linear Interpolation: `na.approx()`
+
+```{r}
+gdp <- readRDS(gzcon(url("https://assets.datacamp.com/production/course_1964/datasets/us_gdp.RData")))
+
+# Get a summary of your GDP data
+summary(gdp)
+
+# Convert GDP date column to time object
+gdp$date <- as.yearqtr(gdp$date)
+
+# Convert GDP data to xts
+gdp_xts <- as.xts(gdp[, -1], order.by = gdp[,1])
+
+# Plot GDP data over time
+plot.xts(gdp_xts)
+
+```
+
+Notice that there are some missing values in our data that we'd want to impute. 
+
+```{r}
+# Fill NAs in gdp_xts with the last observation carried forward
+gdp_locf <- na.locf(gdp_xts)
+
+# Fill NAs in gdp_xts with the next observation carried backward 
+gdp_nocb <- na.locf(gdp_xts, fromLast = TRUE)
+
+# Produce a plot for each of your new xts objects
+par(mfrow = c(2,1))
+plot.xts(gdp_locf, major.format = "%Y")
+plot.xts(gdp_nocb, major.format = "%Y")
+
+# Query for GDP in 1993 in both gdp_locf and gdp_nocb
+gdp_locf["1993"]
+gdp_nocb["1993"]
+
+```
+
+Both techniques lead to completely different results for 1993! So it must be reasoned which one to use or if there is another, better-suited way to solve the problem of missings. Next, we'll use the technique of `linear interpolation`.
+
+```{r}
+# Fill NAs in gdp_xts using linear approximation
+gdp_approx <- na.approx(gdp_xts)
+
+# Plot your new xts object
+plot.xts(gdp_approx, major.format = "%Y")
+  
+# Query for GDP in 1993 in gdp_approx
+gdp_approx["1993"]
+
+```
+
+### Lagging and differencing
+
+```{r}
+# load unemployment data
+unemployment <- readRDS(gzcon(url("https://assets.datacamp.com/production/course_1964/datasets/unemployment.RData")))
+
+# View a summary of your unemployment data
+summary(unemployment)
+plot(unemployment)
+
+# Use na.approx to remove missing values in unemployment data
+unemployment <- na.approx(unemployment)
+
+# Plot new unemployment data
+plot.zoo(unemployment, plot.type = "single", lty = c(1,2), col=c(1,2))
+legend("topright", lty = c(1,2), legend = c("us", "ma"), ,col =c(1,2),bg = "white")
+
+# Create a one month lag of US unemployment
+us_monthlag <- lag(unemployment$us, k = 1)
+
+# Create a one year lag of US unemployment
+us_yearlag <- lag(unemployment$us, k = 12)
+
+# Merge your original data with your new lags 
+unemployment_lags <- merge(unemployment, us_monthlag, us_yearlag)
+
+# View the first 15 rows of unemployment_lags
+head(unemployment_lags, n=15)
+
+# Generate monthly difference in unemployment
+unemployment$us_monthlydiff <- diff(unemployment$us, lag = 1, differences = 1)
+
+# Generate yearly difference in unemployment
+unemployment$us_yearlydiff <- diff(unemployment$us, lag = 12, differences = 1)
+
+# Plot US unemployment and annual difference
+par(mfrow = c(2,1))
+plot.xts(unemployment$us_monthlydiff)
+plot.xts(unemployment$us_yearlydiff, type = "h")
+
+```
+
+### Rolling functions
+Applying a function over a particular window over time. For discrete windows:
+
+- split the data according to period: `split()`
+- apply function within period: `lapply()`
+- bind new data into xts object: `do.call()`
+
+Rolling windows to calculate a rolling average across a certain period. E.g. rolling averages... 
+Of particular use is the split-lapply-bind pattern here:
+
+```{r}
+# Add a quarterly difference in gdp
+gdp$quarterly_diff <- diff(gdp_approx, lag = 1, differences = 1)
+
+# Split gdp$quarterly_diff into years
+gdpchange_years <- split(gdp$quarterly_diff, f = "years")
+
+# Use lapply to calculate the cumsum each year
+gdpchange_ytd <- lapply(gdpchange_years, FUN = cumsum)
+
+# Use do.call to rbind the results
+gdpchange_xts <- do.call(rbind, gdpchange_ytd)
+
+# Plot cumulative year-to-date change in GDP
+plot.xts(gdpchange_xts, type = "h")
+
+
+```
+
+Add a continous rolling yearly average to US unemployment:
+
+```{r}
+# Use rollapply to calculate the rolling yearly average US unemployment
+unemployment$year_avg <- rollapply(unemployment$us, width = 12, FUN = mean)
+
+# Plot all columns of US unemployment data
+plot.zoo(unemployment[, c("us", "year_avg")], plot.type = "single", lty = c(1,2), lwd = c(1,2), col=c(1,2))
+```
+
+```{r}
+# Add a one-year lag of MA unemployment
+unemployment$ma_yearlag <- lag(unemployment$ma, k=12)
+
+# Add a six-month difference of MA unemployment
+unemployment$ma_sixmonthdiff <- diff(unemployment$ma, lag=6, differences = 1)
+
+# Add a six-month rolling average of MA unemployment
+unemployment$ma_sixmonthavg <- rollapply(unemployment$ma, width=6, FUN=mean)
+  
+# Add a yearly rolling maximum of MA unemployment
+unemployment$ma_yearmax <- rollapply(unemployment$ma, width=12, FUN = max)
+
+# View the last year of unemployment data
+tail(unemployment, n=12)
+
+
+```
+
+## Case Study 4: Sports data
+
+### Advanced features of xts
+
+- Finding Endpoints: `years <- endpoints(unemployment, on = "years")`
+- Apply by period: `period.apply(unemployment, INDEX = years, FUN = mean)`
+
+```{r}
+# endpoints
+years <- endpoints(unemployment, on = "years")
+head(years) # gives index
+head(unemployment[years])
+
+# apply by period
+head(period.apply(unemployment, INDEX = years, FUN = mean))
+
+```
+
+Next, explore Sports Data and relation to tourism. 
+
+```{r}
+# Load sports data
+sports <- readRDS(gzcon(url("https://assets.datacamp.com/production/course_1964/datasets/sports.RData
+")))
+
+head(sports)
+
+# Generate a new variable coding for red sox wins
+sports$win_loss <- ifelse(sports$boston_score > sports$opponent_score, 1, 0)
+
+# Identify the date of the last game each season
+close <- endpoints(sports, on = "years")
+
+# Calculate average win/loss record at the end of each season
+period.apply(sports[, "win_loss"], INDEX = close, FUN = mean)
+
+
+```
+
+```{r, message=FALSE}
+
+# Split redsox_xts win_loss data into years 
+redsox_seasons <- split(sports$win_loss, f = "years")
+
+# Use lapply to calculate the cumulative mean for each season
+cummean <- function(x){
+  y <- cumsum(x) / seq_along(x)
+  return(y)
+}
+
+redsox_ytd <- lapply(redsox_seasons, FUN = cummean)
+
+# Use do.call to rbind the results
+redsox_winloss <- do.call(rbind, redsox_ytd)
+
+# Plot the win_loss average for the 2013 season
+plot.xts(redsox_winloss["2013"], ylim = c(0, 1))
+
+```
+
+```{r}
+# Select only the 2013 season
+redsox_2013 <- sports["2013"]
+
+# Use rollapply to generate the last ten average
+lastten_2013 <- rollapply(redsox_2013$win_loss, width = 10, FUN = mean)
+
+# Plot the last ten average during the 2013 season
+plot.xts(lastten_2013, ylim = c(0, 1))
+
+
+```
+
+### Indexing commands in xts
+
+- .index() extracts raw time index
+- .indexwday() for weekdays
+
+```{r}
+# extract raw time index
+head(.index(unemployment))
+
+# extract weekday
+head(.indexwday(sports))
+
+# extract sunday games
+sunday_games <- which(.indexwday(sports) == 0)
+head(sunday_games)
+```
+
+```{r}
+# Extract the day of the week of each observation
+weekday <- .indexwday(sports)
+head(weekday)
+
+# Generate an index of weekend dates
+weekend <- which(.indexwday(sports) == 0 | .indexwday(sports) == 6)
+
+# Subset only weekend games
+weekend_games <- sports[weekend]
+head(weekend_games)
+```
+
+```{r}
+# Generate a subset of sports data with only homegames
+homegames <- sports[sports$homegame == 1]
+
+# Calculate the win/loss average of the last 20 home games
+homegames$win_loss_20 <- rollapply(homegames$win_loss, width = 20, FUN = mean)
+
+# Calculate the win/loss average of the last 100 home games
+homegames$win_loss_100 <- rollapply(homegames$win_loss, width = 100, FUN = mean)
+
+# Use plot.xts to generate
+plot.zoo(homegames[, c("win_loss_20", "win_loss_100")], plot.type = "single", lty = c(2,1), lwd = c(1,2), col=c(1,2))
+```
+
+
