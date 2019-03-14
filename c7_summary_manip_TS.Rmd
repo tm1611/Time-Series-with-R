@@ -1,8 +1,10 @@
 ---
-title: "Manipulating Time Series Data in R: Case Study"
+title: 'Manipulating Time Series Data in R: Case Study'
 author: "Timo Meiendresch"
 date: "8 March 2019"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r, message=FALSE, echo=FALSE}

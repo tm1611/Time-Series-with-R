@@ -398,8 +398,8 @@ edhec_09</code></pre>
 <pre><code>##            Convertible Arbitrage
 ## 2009-01-31                0.0491
 ## 2009-02-28                    NA
-## 2009-03-31                0.0235
-## 2009-04-30                    NA
+## 2009-03-31                    NA
+## 2009-04-30                0.0500
 ## 2009-05-31                0.0578
 ## 2009-06-30                0.0241
 ## 2009-07-31                0.0611
@@ -471,43 +471,43 @@ idx &lt;- seq(from = as.POSIXct(&quot;2007-01-03&quot;), to = as.POSIXct(&quot;2
 b &lt;- xts(x, order.by=idx)
 b</code></pre>
 <pre><code>##                [,1]
-## 2007-01-03 19.16476
-## 2007-01-04 19.57035
-## 2007-01-05 19.95895
-## 2007-01-06 21.80360</code></pre>
+## 2007-01-03 19.77391
+## 2007-01-04 19.90189
+## 2007-01-05 20.11247
+## 2007-01-06 21.66821</code></pre>
 <pre class="r"><code>cbind(a, b)</code></pre>
 <pre><code>##               Close        b
 ## 2007-01-02 50.11778       NA
-## 2007-01-03 50.39767 19.16476
-## 2007-01-04 50.33236 19.57035
-## 2007-01-05       NA 19.95895
-## 2007-01-06       NA 21.80360</code></pre>
+## 2007-01-03 50.39767 19.77391
+## 2007-01-04 50.33236 19.90189
+## 2007-01-05       NA 20.11247
+## 2007-01-06       NA 21.66821</code></pre>
 <p>Math operations are on the intersection of times only.</p>
 <pre class="r"><code>a + b # Applied only if we have the same dates</code></pre>
 <pre><code>##               Close
-## 2007-01-03 69.56243
-## 2007-01-04 69.90271</code></pre>
+## 2007-01-03 70.17158
+## 2007-01-04 70.23425</code></pre>
 <pre class="r"><code># add a to b using index of b
 b + merge(a, index(b))</code></pre>
 <pre><code>##                  e1
-## 2007-01-03 69.56243
-## 2007-01-04 69.90271
+## 2007-01-03 70.17158
+## 2007-01-04 70.23425
 ## 2007-01-05       NA
 ## 2007-01-06       NA</code></pre>
 <pre class="r"><code># fill missings with 0 &lt;- takes values from b. 
 b + merge(a, index(b), fill = 0)</code></pre>
 <pre><code>##                  e1
-## 2007-01-03 69.56243
-## 2007-01-04 69.90271
-## 2007-01-05 19.95895
-## 2007-01-06 21.80360</code></pre>
+## 2007-01-03 70.17158
+## 2007-01-04 70.23425
+## 2007-01-05 20.11247
+## 2007-01-06 21.66821</code></pre>
 <pre class="r"><code># use locf to fill in missing values
 b + merge(a, index(b), fill = na.locf)</code></pre>
 <pre><code>##                  e1
-## 2007-01-03 69.56243
-## 2007-01-04 69.90271
-## 2007-01-05 70.29130
-## 2007-01-06 72.13596</code></pre>
+## 2007-01-03 70.17158
+## 2007-01-04 70.23425
+## 2007-01-05 70.44483
+## 2007-01-06 72.00056</code></pre>
 </div>
 <div id="ch.-3-merging-time-series" class="section level2">
 <h2>Ch. 3 Merging time series</h2>
@@ -516,29 +516,29 @@ b + merge(a, index(b), fill = na.locf)</code></pre>
 merge(a, b) # defaul join=&quot;outer&quot;</code></pre>
 <pre><code>##               Close        b
 ## 2007-01-02 50.11778       NA
-## 2007-01-03 50.39767 19.16476
-## 2007-01-04 50.33236 19.57035
-## 2007-01-05       NA 19.95895
-## 2007-01-06       NA 21.80360</code></pre>
+## 2007-01-03 50.39767 19.77391
+## 2007-01-04 50.33236 19.90189
+## 2007-01-05       NA 20.11247
+## 2007-01-06       NA 21.66821</code></pre>
 <pre class="r"><code># Inner join: Only common points in time
 merge(a, b, join=&quot;inner&quot;)</code></pre>
 <pre><code>##               Close        b
-## 2007-01-03 50.39767 19.16476
-## 2007-01-04 50.33236 19.57035</code></pre>
+## 2007-01-03 50.39767 19.77391
+## 2007-01-04 50.33236 19.90189</code></pre>
 <pre class="r"><code># Right join: Joining according to index of right series dates
 merge(a, b, join=&quot;right&quot;)</code></pre>
 <pre><code>##               Close        b
-## 2007-01-03 50.39767 19.16476
-## 2007-01-04 50.33236 19.57035
-## 2007-01-05       NA 19.95895
-## 2007-01-06       NA 21.80360</code></pre>
+## 2007-01-03 50.39767 19.77391
+## 2007-01-04 50.33236 19.90189
+## 2007-01-05       NA 20.11247
+## 2007-01-06       NA 21.66821</code></pre>
 <pre class="r"><code># Use fill to fill with a specific number
 merge(a, b, join=&quot;right&quot;, fill=-1)</code></pre>
 <pre><code>##               Close        b
-## 2007-01-03 50.39767 19.16476
-## 2007-01-04 50.33236 19.57035
-## 2007-01-05 -1.00000 19.95895
-## 2007-01-06 -1.00000 21.80360</code></pre>
+## 2007-01-03 50.39767 19.77391
+## 2007-01-04 50.33236 19.90189
+## 2007-01-05 -1.00000 20.11247
+## 2007-01-06 -1.00000 21.66821</code></pre>
 <pre class="r"><code>merge(a, c(1,1,1))</code></pre>
 <pre><code>##               Close c.1..1..1.
 ## 2007-01-02 50.11778          1
@@ -560,11 +560,11 @@ merge(a, b, join=&quot;right&quot;, fill=-1)</code></pre>
 <pre><code>##               Close
 ## 2007-01-02 50.11778
 ## 2007-01-03 50.39767
-## 2007-01-03 19.16476
+## 2007-01-03 19.77391
 ## 2007-01-04 50.33236
-## 2007-01-04 19.57035
-## 2007-01-05 19.95895
-## 2007-01-06 21.80360</code></pre>
+## 2007-01-04 19.90189
+## 2007-01-05 20.11247
+## 2007-01-06 21.66821</code></pre>
 </div>
 <div id="handling-missingness" class="section level2">
 <h2>Handling missingness</h2>
@@ -578,19 +578,19 @@ z</code></pre>
 ## 2007-01-03 50.39767
 ## 2007-01-03       NA
 ## 2007-01-04       NA
-## 2007-01-04 19.57035
-## 2007-01-05 19.95895
-## 2007-01-06 21.80360</code></pre>
+## 2007-01-04 19.90189
+## 2007-01-05 20.11247
+## 2007-01-06 21.66821</code></pre>
 <pre class="r"><code># use na.locf()
 cbind(z, na.locf(z), na.locf(z, fromLast = TRUE))</code></pre>
 <pre><code>##               Close  Close.1  Close.2
 ## 2007-01-02 50.11778 50.11778 50.11778
 ## 2007-01-03 50.39767 50.39767 50.39767
-## 2007-01-03       NA 50.39767 19.57035
-## 2007-01-04       NA 50.39767 19.57035
-## 2007-01-04 19.57035 19.57035 19.57035
-## 2007-01-05 19.95895 19.95895 19.95895
-## 2007-01-06 21.80360 21.80360 21.80360</code></pre>
+## 2007-01-03       NA 50.39767 19.90189
+## 2007-01-04       NA 50.39767 19.90189
+## 2007-01-04 19.90189 19.90189 19.90189
+## 2007-01-05 20.11247 20.11247 20.11247
+## 2007-01-06 21.66821 21.66821 21.66821</code></pre>
 <p>In the last series last observation has been carried forward from before and from later observations.</p>
 <p>Other functions to deal with NAs:</p>
 <ul>
@@ -609,25 +609,25 @@ cbind(z, na.locf(z), na.locf(z, fromLast = TRUE))</code></pre>
 <pre class="r"><code># compare standard differences to initial series
 cbind(b, diff(b))</code></pre>
 <pre><code>##                   b   diff.b.
-## 2007-01-03 19.16476        NA
-## 2007-01-04 19.57035 0.4055905
-## 2007-01-05 19.95895 0.3885982
-## 2007-01-06 21.80360 1.8446563</code></pre>
+## 2007-01-03 19.77391        NA
+## 2007-01-04 19.90189 0.1279773
+## 2007-01-05 20.11247 0.2105778
+## 2007-01-06 21.66821 1.5557351</code></pre>
 <pre class="r"><code>cbind(b, lag(b, k = -1))</code></pre>
 <pre><code>##                   b lag.b..k....1.
-## 2007-01-03 19.16476       19.57035
-## 2007-01-04 19.57035       19.95895
-## 2007-01-05 19.95895       21.80360
-## 2007-01-06 21.80360             NA</code></pre>
+## 2007-01-03 19.77391       19.90189
+## 2007-01-04 19.90189       20.11247
+## 2007-01-05 20.11247       21.66821
+## 2007-01-06 21.66821             NA</code></pre>
 <pre class="r"><code># Create own first differences
 z &lt;- cbind(b, lag(b))
 z$first_diff &lt;- z$b - z$lag.b.
 z</code></pre>
 <pre><code>##                   b   lag.b. first_diff
-## 2007-01-03 19.16476       NA         NA
-## 2007-01-04 19.57035 19.16476  0.4055905
-## 2007-01-05 19.95895 19.57035  0.3885982
-## 2007-01-06 21.80360 19.95895  1.8446563</code></pre>
+## 2007-01-03 19.77391       NA         NA
+## 2007-01-04 19.90189 19.77391  0.1279773
+## 2007-01-05 20.11247 19.90189  0.2105778
+## 2007-01-06 21.66821 20.11247  1.5557351</code></pre>
 </div>
 <div id="ch.-4-apply-functions-by-time" class="section level2">
 <h2>Ch. 4 Apply functions by time</h2>
