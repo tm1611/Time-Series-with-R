@@ -3,8 +3,8 @@ title: "Advanced Methods"
 author: "Timo Meiendresch"
 date: "4 February 2019"
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
 ---
 
 ```{r, message=FALSE, echo=FALSE}

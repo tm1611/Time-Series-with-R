@@ -3,7 +3,6 @@ title: "Intro to Time Series Analysis"
 author: "Timo Meiendresch"
 date: "18 January 2019"
 output:
-  pdf_document: default
   html_document: default
 ---
 
@@ -11,7 +10,7 @@ output:
 rm(list=ls())
 graphics.off()
 library(xts)
-dat <- read.csv("C:/Users/TM/Dropbox/UzK_WS1819/Time Series Analysis/DC Time Series with R/CPIAUCSL.csv")
+dat <- read.csv("CPIAUCSL.csv")
 data(economics, package="ggplot2")
 
 ```
