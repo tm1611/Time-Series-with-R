@@ -14,7 +14,7 @@ rm(list=ls())
 graphics.off()
 ```
 
-Some example of time series with various qualities. For example the `AirPassengers` data from Box and Jenkins show seasonality, trend and heteroscedasticity, which distinguishes the data from white noise.
+We start with some examples of time series and show various qualities. For example the `AirPassengers` data from Box and Jenkins shows seasonality, trend and heteroscedasticity... In a later step we'd like to capture those characteristics with a model in order to be able to predict future values. 
 
 ```{r, message=FALSE}
 # load required packages
