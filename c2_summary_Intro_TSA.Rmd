@@ -1,7 +1,6 @@
 ---
 title: "Intro to Time Series Analysis"
 author: "Timo Meiendresch"
-date: "18 January 2019"
 output: html_document
 ---
 

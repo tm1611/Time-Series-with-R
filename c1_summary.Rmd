@@ -1,8 +1,9 @@
 ---
-title: 'Time Series with R: Manipulating Time Series Data in R with xts & zoo'
+title: "Time Series with R: Manipulating Time Series Data in R with xts & zoo"
 author: "Timo Meiendresch"
 output: html_document
 ---
+
 ```{r, echo=FALSE}
 # Cleaning
 rm(list=ls())
@@ -18,6 +19,7 @@ library(xts)
 ```
 
 Step 1: Create a simple matrix and an index of two consecutive days. 
+
 ```{r}
 x <- matrix(1:4, 2,2 )
 x
@@ -27,12 +29,14 @@ idx
 ```
 
 Step 2: Bring matrix and index together as an xts element using the `xts()`function. Take a look at the structure with `str(x)`.
+
 ```{r}
 X <- xts(x, order.by=idx)
 str(X)
 X
 
 ```
+
 The xts() constructor allows to specify some more useful options, especially to take care of the frequency and the time zone. Note that xts is a subclass of `zoo`.
 
 #### Deconstructing xts
@@ -41,6 +45,7 @@ We can use `coredata()`to extract the data component from an `xts` element and `
 ## Importing, exporting and converting time series
 
 Use `as.xts()` to convert other time series into xts. Here, `ts` to `xts`.
+
 ```{r}
 # Load data from R datasets
 data(sunspots)
@@ -51,6 +56,7 @@ head(sunspots_xts)
 ```
 
 We can also apply the `as.xts` function directly when loading the data, i.e. as: 
+
 ```{r, eval=FALSE}
 as.xts(read.table("file"))
 as.xts(read.csv("file"))
@@ -64,7 +70,6 @@ head(edhec["2009", 1])
 
 # Select only variables from Jan09 to Mar09
 edhec["2009-01/03",1]
-
 ```
 
 ## Other extraction techniques
@@ -77,6 +82,7 @@ dates <- as.POSIXct(c("2016-06-25","2016-06-27"))
 ```
 
 ## Update and replace elements
+
 ```{r}
 # take subset of edhec first
 edhec_09 <- edhec["2009", 1]
@@ -98,6 +104,7 @@ class(OHLC)
 dim(OHLC)
 head(OHLC, 3)
 ```
+
 We can use the `first()`and `last()` function to get  the "first x days/months/etc." or the "last x days/months/etc.". 
 
 ```{r}
@@ -106,11 +113,13 @@ head(last(OHLC[,"Close"], "1 month"),3)
 ```
 
 We can also use integers to specify n 
+
 ```{r}
 first(OHLC[,"Close"], n=3)
 ```
 
 `first()` and `last()` can be nested for internal intervals 
+
 ```{r}
 # take last 3 days of first 2 months
 # Backwards induction
@@ -122,6 +131,7 @@ first(first(OHLC[, "Close"], "1 months"),"-27 days")
 
 ## Math operations using xts
 xts is a matrix. Math operations are on the intersection of times (common dates). 
+
 ```{r}
 # Take subset as first matrix
 a <- first(OHLC[,"Close"], "3 days")
@@ -137,6 +147,7 @@ cbind(a, b)
 ```
 
 Math operations are on the intersection of times only. 
+
 ```{r}
 a + b # Applied only if we have the same dates
 
@@ -170,6 +181,7 @@ merge(a, c(1,1,1))
 merge(a, 3)
 merge(a, as.POSIXct("2019-01-01"))
 ```
+
 Next: Consider rbind() to combine series by row. Rows are inserted in time order. All rows in rbind() must have a time and the numbers of columns must match.
 
 ```{r}
@@ -177,7 +189,8 @@ rbind(a, b)
 ```
 
 ## Handling missingness
-locf means "las observation carried forward" and can be used to deal with NAs. 
+locf means "last observation carried forward" and can be used to deal with NAs. 
+
 ```{r}
 # Create a series with NAs
 z <- rbind(a,b)
@@ -187,6 +200,7 @@ z
 # use na.locf()
 cbind(z, na.locf(z), na.locf(z, fromLast = TRUE))
 ```
+
 In the last series last observation has been carried forward from before and from later observations. 
 
 Other functions to deal with NAs:
@@ -230,7 +244,7 @@ period.apply(OHLC$Close, INDEX=ep, FUN=mean)
 ```
 To reach a similar result we can also use shortcut functions: 
 
-* `apply.monthly(), apply.yearly(), apply.quarterly(), etc.`
+- `apply.monthly(), apply.yearly(), apply.quarterly(), etc.`
 
 ```{r}
 apply.monthly(OHLC$Close, mean)
@@ -238,6 +252,7 @@ apply.monthly(OHLC$Close, mean)
 ```
 
 The `split(x, f="months")` function splits data into chunks of time lists. 
+
 ```{r}
 OHLC_monthly <- split(OHLC[,"Close"], f="months")
 
@@ -257,6 +272,7 @@ Note that `OHLC = FALSE` is an option and that we can
 
 ## Rolling functions
 First, `split- lapply - do.call(rbind)` paradigm is useful to split a time series apply certain cumulative calculations before binding the time series back together. 
+
 ```{r}
 OHLC_monthly <- split(OHLC[,1], f="months")
 OHLC_monthly <- lapply(OHLC_monthly, FUN=cumsum)
@@ -264,12 +280,14 @@ OHLC_monthly <- do.call(rbind, OHLC_monthly)
 ```
 
 Rolling windows to apply a function on a certain period, eg. always 3 days, etc. 
+
 ```{r}
 # calculate three-day mean of OHLC
 head(rollapply(OHLC[,4], 3, mean))
 ```
 
 ## Ch. 5 Index, Attributes, and TimeZones
+
 ```{r}
 # Check index and timezone
 index(OHLC)[1:3]
@@ -281,6 +299,7 @@ head(OHLC[,1],3)
 indexFormat(OHLC) <- "%d %b %Y"
 head(OHLC[,1],3)
 ```
+
 Always check and set your time zone to avoid surprises. This can be done with the xts constructor as it has a `tzone=...` argument
 
 ## Periodicity

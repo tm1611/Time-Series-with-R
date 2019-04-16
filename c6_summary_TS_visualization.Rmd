@@ -1,12 +1,8 @@
 ---
 title: "Time Series Visualization"
 author: "Timo Meiendresch"
-date: "16 February 2019"
-output: 
-  html_document:
-    keep_md: true
+output: html_document
 ---
-
 
 ```{r, message=FALSE, echo=FALSE}
 rm(list=ls())
