@@ -3,9 +3,8 @@ title: 'Time Series with R: Manipulating Time Series Data in R with xts & zoo'
 author: "Timo Meiendresch"
 date: "15 January 2019"
 output: 
-  html_document:
-    keep_md: true
-
+  html_document
+  
 ---
 ```{r, echo=FALSE}
 # Cleaning
