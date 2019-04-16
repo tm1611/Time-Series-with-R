@@ -1,7 +1,7 @@
 # Time-Series-with-R
 Notes and Code of the "Time Series with R" Track on DataCamp. 
 
-My suggestion is to download the repository to see the files correctly in your browser or simply copy/paste the URL of the respective html file into this [preview tool](http://htmlpreview.github.io/).
+![Image](https://github.com/tm1611/Time-Series-with-R/blob/master/images/certificate.pdf)
 
-I have also provided markdown (.md) files but they look different as visualizations as well as the formatting is not always correct. 
+My suggestion is to download the repository and view the files in your browser. Alternatively, you could copy/paste the URL of the respective html file into this [html preview tool](http://htmlpreview.github.io/).
 
