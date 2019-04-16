@@ -9,7 +9,7 @@ output: html_document
 rm(list=ls())
 graphics.off()
 library(xts)
-dat <- read.csv("CPIAUCSL.csv")
+dat <- read.csv("data/CPIAUCSL.csv")
 data(economics, package="ggplot2")
 
 ```
