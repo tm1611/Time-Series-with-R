@@ -8,7 +8,7 @@ knit: (function(input_file, encoding) {
   output_file=file.path(dirname(input_file), out_dir, 'c2_summary_Intro_TSA.html'))})
 ---
 
-```{r, message=FALSE, echo=FALSE}
+```{r, message=FALSE, echo=TRUE}
 rm(list=ls())
 graphics.off()
 library(xts)

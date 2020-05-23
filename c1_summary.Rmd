@@ -1,11 +1,11 @@
 ---
 title: "Time Series with R: Manipulating Time Series Data in R with xts & zoo"
-author: "Timo Meiendresch"
-#knit: (function(input_file, encoding) {
- # out_dir <- 'html_files';
-  #rmarkdown::render(input_file,
-  #encoding=encoding,
-  #output_file=file.path(dirname(input_file), out_dir, 'c1_summary_intro.html'))})
+author: Timo Meiendresch
+knit: (function(input_file, encoding) {
+  out_dir <- 'html_files';
+  rmarkdown::render(input_file,
+  encoding=encoding,
+  output_file=file.path(dirname(input_file), out_dir, 'c1_summary.html'))})
 ---
 
 ```{r, echo=FALSE}
