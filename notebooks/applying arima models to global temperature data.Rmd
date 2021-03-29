@@ -1,0 +1,189 @@
+---
+title: "Applying ARIMA Models to Global Temperature Data"
+author: "Timo Meiendresch"
+knit: (function(input_file, encoding) {
+  out_dir <- 'html_outputs';
+  rmarkdown::render(input_file,
+  encoding=encoding,
+  output_file=file.path(dirname(input_file), out_dir, 'applying arima models to global temperature data.html'))})
+---
+
+```{r, message=FALSE, echo=FALSE}
+rm(list=ls())
+graphics.off()
+```
+
+```{r, message=FALSE}
+# libraries
+library("astsa")
+library("ggplot2")
+library("forecast")
+library("fpp2")
+library("aTSA")
+```
+
+## 1. Introduction
+- Complementary document to "Time Series Analysis" course
+- Demonstrate how to apply ARIMA
+
+## 2. Methodology 
+
+### Autoregressive and Moving-average models
+
+- The **White Noise** process ${Z_t}$ is independently distributed, unpredictable ("no memeory"), has mean zero, and is therefore not correlated to previous realizations.
+
+Objective in ARIMA models is to seperate the deterministic part from the stochastic part (signal and noise), i.e. representing the deterministic part as ARIMA model in a way that the stochastic part is white noise. 
+
+Autoregressive models do this by representing the current value as a linear combination of previous values:
+$$ X_t = \delta + \alpha_1 X_{t-1} + ... + \alpha_p X_{t-p} + u_t,$$
+where $u_t$ is assumed to be white noise. 
+
+If the errors are correlated, i.e. that the current value is a linear representation of previous errors. For this, a moving-average specification can be used:
+$$X_t = \mu + u_t + \beta_1 u_{t-1} + ... + \beta_q u_{t-1} $$
+Putting both elements together leads to the ARMA(p,q) model:
+$$X_t = \delta + \alpha_1 X_{t-1} + ... \alpha_p X_{t-p} + u_t + \beta_1 u_{t-1} + ... \beta_q u_{t-q}$$
+### Stationarity
+The underlying series before applying an ARMA(p,q) model needs to be stationary. 
+
+If a series is stationary, its main characteristics (mean, covariance, autocovariance) do not change over time. If a time series has to be differenced once to be stationary, it is said to be integrated of order one (I(1)). Higher order of integrations are unusual but can be approached similarly. 
+Generalizing the ARMA(p,q) model by considering the order of integration yields the ARIMA(p,d,q) representation. 
+
+A motviation to use ARMA/ARIMA models on stationary data is given by the **Wold Decomposition**. Wold showed that any covariance-stationary time series may be represented as a linear combination of white noise: 
+$$ X_t =  u_t + \psi_1 u_{t-1} + \psi_2 u_{t-2} + ... $$
+It can be shown that any ARMA can be transformed to this form and therefore they are well suited to model stationary processes.
+
+### Fitting ARMA models
+We use autocorrelation function (ACF) and partial autocorrelation function (PACF) to identify a good AR or MA model. Moreover, based on ACF and PACF we decide whether an ARMA model may be preferred. ARMA models are usually chosen by choosing the ARMA(p,q) with the combination of p and q that yields the lowest Information criterion.
+
+- AR(p) model: ACF tails off immediately, PACF is significant for p lags. 
+- MA(q) model: PACF tails off immediately, ACF is significant for q lags.
+- ARMA(p,q): Slowly fades off for ACF and PACF. Significant for several lags. Choose ARMA(p,q) with lowest information criterion.
+
+## 3. The Data
+The data that will be analysed are yearly global mean temperature deviations, covering the time period of 1880 to 2015. Its deviations are measured in centigrade and the reference temperature, from which the deviations are measured, is the mean average from 1951 to 1980. Data are estimates of global surface temperature change and data source is the National Aeronautics and Space Administration (NASA).
+
+```{r, echo=FALSE}
+# data
+temp <- globtemp
+``` 
+
+```{r}
+# Plots
+autoplot(temp) +
+  ggtitle("Global Temperature Deviations")+
+  ylab("Deviation (°C)")+
+  xlab("Year")
+
+ggAcf(temp)
+ggPacf(temp)
+
+# differencing the data
+temp_d <- diff(temp)
+
+autoplot(temp_d)+
+  ggtitle("Differenced Series of Global Temperature Deviations")+
+  xlab("Year")+
+  ylab("Differenced Deviation")
+
+ggAcf(temp_d)
+ggPacf(temp_d)
+
+adf.test(temp_d)
+```
+
+## 4. Data Analysis and Forecasting
+- Series integrated: Differencing and ADF Test
+- ACF: Significant for lags 1,2,4
+- PACF: Significant lags 1,2,3
+- Suggests to use ARMA(p,q) after differencing the series
+
+```{r}
+# Fit best ARIMA model
+fit1 <- auto.arima(temp) # optimizes on AICc
+fit1
+
+# Forecast for 35 years to 2050
+fc1 <- fit1 %>% 
+    forecast::forecast(h = 35)
+
+autoplot(fc1) +
+  autolayer(fitted(fc1), series = "fitted values")+
+  xlab("Year")+
+  ylab("deviation")+
+  ggtitle("Forecasts from ARIMA (1,1,3)")+
+  theme(legend.position = "none")
+```
+
+From the initial time series it looks like there is a structural change around 1950. Next, refit a new model based on post-1950 subset.
+
+We will first split the post-1950 subset into training and testing data to check how good our model performs on unseen data. For this we'll further split the post-1950 data.
+- training data: 1950 - 1999 
+- test data: 2000-2015
+
+```{r}
+### subsetting start = 1950; train-test split for backtesting (Cross-validation)
+str(temp)
+temp_post <- window(temp, start=1951)
+train <- window(temp_post, end = 2000)
+test <- window(temp_post, start = 2001)
+
+autoplot(train) +
+  autolayer(test) +
+  ggtitle("Train-test split of post-1950 data")+
+  xlab("Year")+
+  ylab("Temperature deviations")
+```
+
+Next steps: Build a model based on training data and forecast for the time horizon of the test data. Comparing forecast with real data to evaluate forecast performance by accuracy measures. 
+
+```{r}
+# ACF/PACF of differenced training data
+ggAcf(diff(train))
+ggPacf(diff(train))
+
+# Fit ARIMA model to training data
+fit_train <- auto.arima(train)
+fit_train
+
+# 15-step ahead forecast  
+fc_train <- fit_train %>% 
+  forecast::forecast(h=15)
+
+autoplot(train) +
+  autolayer(test)+
+  autolayer(fc_train, PI = FALSE) 
+  #autolayer(fitted(fc_train))
+  
+# Calculate accuracy measures
+accuracy(fc_train, temp_post)
+```
+
+Now, we'll fit the data to the complete post-1950 data and predict temperature deviation up to 2050. Note that this is a pretty long time-horizon, especially considering the implicit assumption that the underlying process remains constant, i.e. no further external factors changing the trend. 
+
+```{r}
+# Now: Use the complete post-1950 subset to fit a model and forecast upt to 2050
+fit_post <- auto.arima(temp_post)
+fc_post <- forecast::forecast(fit_post, h=35)
+fit_post
+
+autoplot(fc_post) +
+  autolayer(fitted(fc_post)) +
+  xlab("Year")+
+  ylab("Temperature deviations")
+
+```
+
+**Next:** Visually compare both forecasts (complete sample vs post-1950 sample). 
+
+```{r}
+autoplot(temp) +
+  autolayer(fc_post, PI = FALSE, col="red") +
+  autolayer(fc1, PI = FALSE) +
+  xlab("Year")+
+  ylab("Temperature deviations")
+```
+
+## 5. Summary
+This analysis used a univariate ARIMA(p,d,q) model to analyse and forecast global mean temperature deviations from a given reference period (1951-1980). First, the analysis was conducted on the entire sample from 1880-2015 leading to a point estimate of +1.01°C temperature increase by 2050 with 95% prediction interval of [0.525, 1.4847]. However, from the data it appears as if there was a structureal break around 1950, altering the underlying stochastic process. It should be noted that the validity of this observation has not been analyzed explicitly. 
+
+Nevertheless, we splitted the sample at 1950 and fitted a new model to this subsample of post-1950 data. Using this model for forecasting to 2050, the projected temperature rise was now considerably higher at +1.21°C with a 95% interval of [0.8497, 1.5616] , compared to the reference period.

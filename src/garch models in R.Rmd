@@ -1,0 +1,259 @@
+---
+title: "GARCH models in R"
+author: "Timo Meiendresch"
+knit: (function(input_file, encoding) {
+  out_dir <- 'html_outputs';
+  rmarkdown::render(input_file,
+  encoding=encoding,
+  output_file=file.path(dirname(input_file), out_dir, 'garch models in R.html'))})
+---
+
+```{r, message=FALSE, echo=FALSE}
+rm(list=ls())
+graphics.off()
+```
+
+```{r, message=FALSE}
+# libraries
+library("PerformanceAnalytics")
+library("xts")
+library("quantmod")
+library("ggplot2")
+library("rugarch")
+```
+
+# 1. Standard GARCH models in R 
+
+Starting with calculating relative financial gains and losses, expressed in terms of returns:
+
+$$R_t = \frac{P_t - P_{t-1}}{P_{t-1}} $$
+
+```{r, message=FALSE}
+# Get SP500 data
+getSymbols("^GSPC")
+
+# Plot data
+autoplot(GSPC$GSPC.Close)
+
+# Calculate returns based on closing price
+sp500c <- Cl(GSPC)
+sp500ret <- na.omit(CalculateReturns(sp500c))
+
+# Plot returns
+autoplot(sp500ret) +
+  ggtitle("Returns of S&P 500")+
+  xlab("Year")+
+  ylab("Return")
+```
+
+- Substantially higher volatilitily during financial crisis
+
+Compute empirical standard deviation using sd(), which is the daily volatility when applied to returns. Corresponding formula for T daily returns: 
+$$ \hat{\sigma} = \sqrt{ \frac{1}{T-1} \sum_{t=1}^T (R_t - \hat{\mu})^2  } $$
+Annualized volatility $= \sqrt{252} \times $ daily volatility.
+
+
+```{r}
+# daily sd
+sd(sp500ret)
+
+# annualized volatility
+sqrt(252) * sd(sp500ret)
+```
+
+### Rolling volatility estimation
+- Window width: 22 (trading days) per month
+- function: `chart.RollingPerformance()`
+
+```{r}
+chart.RollingPerformance(R = sp500ret,
+                         width = 22, 
+                         FUN = "sd.annualized",
+                         scale= 252, 
+                         main = "Rolling 1 month vola")
+
+chart.RollingPerformance(R = sp500ret,
+                         width = 22*6, 
+                         FUN = "sd.annualized",
+                         scale= 252, 
+                         main = "Rolling 6 month vola")
+
+
+```
+
+### Garch models
+- Estimation of $\sigma_t$ requires time series models, like GARCH 
+
+Notation and steps of GARCH-Analysis: 
+
+1. Input: Time series of returns
+2. Prediction at time $t-1$ about $R_t$ based on the information set $I_{t-1}$. 
+3. Predicting the mean return $\mu$. The objective is to minimize the prediction error $e_t = R_t - \mu$ 
+$$\mu = E[R_t | I_{t-1}] $$
+4.  We then predict the variance as
+
+$$ 
+\begin{align}
+\sigma^2_t &= var(R_t | I_{t-1}) \\
+ &= E[(R_t - \mu_t)^2 | I_{t-1}] \\
+ &= E[e^2_t | I_{t-1}]
+\end{align}
+$$
+
+In practice, we need an equation that maps past returns into a prediction of the mean
+
+- Rolling mean model: $\mu_t = \frac{1}{M} \sum_{i=1}^{M} R_{t-1}$. Alternatively: AR/MA models 
+
+We also need an equatoin that maps the past returns into predictions of the variance.
+
+- Rolling variance model: $\sigma^2_t = \frac{1}{M} \sum_{t=1}^M e_{t-i}^2 $
+
+More weights to recent observations:
+
+- ARCH(p) model: $\sigma_t^2 = c + \sum_{i=1}^p \; \alpha_i e_{t-i}^2$
+
+However, normally a GARCH(1,1) model is used
+
+- GARCH(1,1) model: $\sigma_t^2 = c + \alpha \, e_{t-1}^2 + \beta \, \sigma_{t-1}^2$
+
+It can be shown that the errors $e_t^2$ follow an ARMA representation. 
+
+### Parameter Restrictions GARCH
+
+1. c $\alpha$ and $\beta$ are $>0$ to ensure that variance is always positive.
+2. $\alpha + \beta < 1$ to ensure that the predicted variance $\sigma_t^2$ returns to the long run variance (stationarity).
+
+The variance returns to the mean and long-run variance equals: $$\frac{c}{1- \alpha - \beta}$$
+
+```{r}
+# set parameter values
+alpha <- 0.1
+beta <- 0.8
+omega <- var(sp500ret) * (1-alpha - beta)
+
+# set series of prediction errors
+e <- sp500ret - mean(sp500ret) 
+e2 <- e^2
+
+## Predict variance for each observation
+# prepare var to be filled in loop
+n <- length(sp500ret)
+predvar <- rep(NA, n)
+
+# initialize at sample var
+predvar[1] <- var(sp500ret)
+
+# Loop 
+for (t in 2:n){
+  # GARCH (1,1):
+  predvar[t] <- omega + alpha * e2[t-1] + beta * predvar[t-1] 
+}
+
+# volatility = sqrt(variance)
+predvol <- sqrt(predvar)
+
+# Create xts object 
+predvol <- xts(predvol, order.by = time(sp500ret))
+
+# Compare with unconditional volatility
+uncvol <- sqrt(omega / (1 - alpha - beta))
+uncvol <- xts(rep(uncvol, n), order.by = time(sp500ret))
+
+plot(predvol)
+lines(uncvol, col = "red", lwd=2)
+```
+
+```{r}
+# Compute the mean daily return
+m <- mean(sp500ret)
+
+# Define the series of prediction errors
+e <- sp500ret - m
+
+# Plot the absolute value of the prediction errors
+par(mfrow = c(2,1),mar = c(3, 2, 2, 2))
+plot(abs(e))
+
+# Plot the acf of the absolute prediction errors
+acf(abs(e))
+```
+
+### The rugarch package
+Standard GARCH(1,1) model:
+- $R_t = \mu + e_t$
+- $e_t \sim N(0, \sigma_t^2)$
+- $\sigma_t^2 = \omega + \alpha \, e_{t-1}^2 + \beta \, \sigma_{t-1}^2$
+
+Estimation by maximum likelihood: Find the parameter values for which the GARCH model is most likely to have generated the observed return series.
+
+Workflow:
+
+1. Specify GARCH model ($\mu, \sigma_t^2, e_t$) with `ugarchspec()`
+2. Estimate the GARCH model of the time series with returns $R_1, ..., R_T$ using `ugarchfit()`
+3. Use the estimated GARCH model to make volatility predctions for $R_{T+1}, ...$
+
+```{r}
+# Specify GARCH(1,1)
+garchspec <- ugarchspec(
+  mean.model = list(armaOrder = c(0,0)),
+  variance.model = list(model = "sGARCH"),
+  distribution.model = "norm")
+
+# Estimate
+garchfit <- ugarchfit(spec = garchspec,
+                      data = sp500ret)
+
+# Forecast 10 periods ahead
+garchfc <- ugarchforecast(fitORspec = garchfit, n.ahead = 10)
+
+# Extract specific values
+garchcoef <- coef(garchfit)
+garchuncvar <- uncvariance(garchfit)
+garchmean <- fitted(garchfit)
+garchvol <- sigma(garchfit)
+```
+
+The model is estimated as
+$$ 
+\begin{align}
+R_t &= 7.1 \cdot 10^{-4} + e_t \\
+e_t &\sim N(0, \hat{\sigma}_t^2) \\
+\hat{\sigma}_t^2 &= 2.6 \cdot 10^{-6} + 0.13 \, e_{t-1}^2 + 0.85 \, \hat{\sigma}_{t-1}^2
+\end{align}
+$$
+
+```{r}
+# plot estimated volatility
+garchvol <- sigma(garchfit)
+plot(garchvol)
+
+# forecasts only
+sigma(garchfc)
+
+# give mean of forecast for return
+fitted(garchfc)
+
+```
+
+### Tactical Asset Allocation
+- Invest percentage of w in a risky asset with volatility $\sigma_t$ and keep (1-w) on a risk-free bank deposit account, yielding the volatility
+$$\sigma_p = w \sigma_t$$
+- How to set w? Volatility Targeting! Solve for w and substitute desired volatility $\sigma_p$, as well as estimated volatility $\sigma_t$
+
+$$w = \frac{\sigma_p}{\sigma_t}$$
+
+```{r}
+annualvol <- sqrt(252) * sigma(garchfit)
+
+# weight risky asset
+vt_weights <- 0.05 /annualvol
+
+# plot weights and annualvol
+plot(merge(annualvol, vt_weights), multi.panel = TRUE)
+```
+
+The plot shows the weight w, which ought to be invested in the SP500 if the desired volatility of the two-asset portfolio is 5%. 
+
+# 2. Improvements of the normal GARCH model
+
+- tbc
